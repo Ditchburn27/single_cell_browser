@@ -1,0 +1,13 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "scbpack"
+version = "0.1.0"
+description = "Pack an AnnData .h5ad into a compact .scb file for AnnData Browser"
+requires-python = ">=3.8"
+dependencies = ["anndata>=0.8", "numpy", "scipy", "pandas"]
+
+[project.scripts]
+scbpack = "scbpack.cli:main"

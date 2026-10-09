@@ -1,0 +1,29 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "viewer-dev",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "viewer",
+        "run",
+        "dev",
+        "--",
+        "--port",
+        "5173",
+        "--strictPort"
+      ],
+      "port": 5173
+    },
+    {
+      "name": "viewer-dist",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "viewer/scripts/serve-dist.mjs",
+        "--fixtures"
+      ],
+      "port": 4173
+    }
+  ]
+}

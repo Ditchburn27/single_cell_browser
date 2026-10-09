@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AnnData Browser</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cg fill='%233d6ff0'%3E%3Ccircle cx='5' cy='12' r='2'/%3E%3Ccircle cx='19' cy='6' r='2'/%3E%3Ccircle cx='14' cy='18' r='2'/%3E%3Ccircle cx='9' cy='7' r='2'/%3E%3Ccircle cx='17' cy='14' r='2'/%3E%3C/g%3E%3C/svg%3E">
+</head>
+<body>
+<div id="welcome">
+  <div class="wcard" id="dropzone">
+    <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--acc)"><circle cx="5" cy="12" r="1.5"/><circle cx="19" cy="6" r="1.5"/><circle cx="14" cy="18" r="1.5"/><circle cx="9" cy="7" r="1.5"/><circle cx="17" cy="14" r="1.5"/><line x1="6.4" y1="11.1" x2="7.9" y2="7.8"/><line x1="10.2" y1="7.8" x2="17.5" y2="6.5"/><line x1="5.8" y1="13.4" x2="13.2" y2="17.1"/></svg>
+    <h1>AnnData Browser</h1>
+    <p class="sub">Explore a single-cell dataset right in your browser.<br>Your file is read locally &mdash; nothing is uploaded.</p>
+    <label class="bigbtn" for="file-input">Choose an .h5ad file</label>
+    <input type="file" id="file-input" accept=".h5ad,.scb" hidden>
+    <p class="hint">or drop it anywhere on this page</p>
+    <div id="welcome-error" class="err" hidden></div>
+    <details class="tips">
+      <summary>What does my file need?</summary>
+      <ul>
+        <li>An embedding in <code>obsm</code> (e.g. <code>X_umap</code>, <code>X_tsne</code>, <code>spatial</code>).</li>
+        <li>Annotations in <code>obs</code> (cell types, clusters, samples&hellip;).</li>
+        <li>Optional: marker genes from <code>sc.tl.rank_genes_groups</code> (<code>uns</code>), colours as <code>uns[&lt;col&gt;_colors]</code>.</li>
+        <li>Very large files (multi-GB): pack them first with <code>scbpack</code> and open the resulting <code>.scb</code>.</li>
+      </ul>
+    </details>
+  </div>
+</div>
+
+<div id="app" hidden>
+  <header>
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--acc)"><circle cx="5" cy="12" r="1.5"/><circle cx="19" cy="6" r="1.5"/><circle cx="14" cy="18" r="1.5"/><circle cx="9" cy="7" r="1.5"/><circle cx="17" cy="14" r="1.5"/><line x1="6.4" y1="11.1" x2="7.9" y2="7.8"/><line x1="10.2" y1="7.8" x2="17.5" y2="6.5"/><line x1="5.8" y1="13.4" x2="13.2" y2="17.1"/></svg>
+    <h1>AnnData Browser</h1>
+    <span class="badge" id="badge"></span>
+    <span id="info"></span>
+    <div class="hright">
+      <div class="slider-wrap"><label>Point size</label><input type="range" id="ptsz" min="0.5" max="14" step="0.5" value="3"><span id="ptval">3</span></div>
+      <div class="slider-wrap"><label>Label size</label><input type="range" id="lblsz" min="8" max="28" step="1" value="12"><span id="lblszval">12</span></div>
+      <button class="hbtn" id="rbtn" title="Reset view (or double-click a plot)">Reset view</button>
+      <button class="hbtn on" id="syncbtn">Sync zoom: on</button>
+      <button class="hbtn" id="zbtn" title="Draw order">Z: random</button>
+      <button class="hbtn on" id="lblbtn">Labels: on</button>
+      <button class="hbtn" id="savebtn" title="Save the current view (colours, gene, zoom…) as a small JSON file">Save view</button>
+      <button class="hbtn" id="loadbtn">Load view</button>
+      <button class="hbtn" id="openbtn">Open file…</button>
+    </div>
+  </header>
+  <div id="toolbar">
+    <div class="panel-ctrl"><label>Colour left by</label><select id="obs-sel"></select></div>
+    <div class="panel-ctrl"><label>Right pane</label><select id="obs-sel2"></select></div>
+    <div class="panel-ctrl" style="position:relative"><label>Gene</label>
+      <input type="text" id="gene-input" placeholder="Search gene…" autocomplete="off" spellcheck="false">
+      <div id="gene-suggestions"></div></div>
+    <div class="panel-ctrl"><label>Highlight</label><input type="text" id="highlight-input" placeholder="Group or value…" style="min-width:110px"></div>
+    <div class="panel-ctrl"><label>Layer</label><select id="layer-sel"></select>
+      <select id="transform-sel" title="Transform applied on the fly"><option value="none">as stored</option><option value="log1p-cp10k">log1p CP10k</option></select></div>
+    <div class="panel-ctrl"><label>Colours</label><select id="cmap-sel"></select>
+      <label class="chk"><input type="checkbox" id="clip-chk" checked> clip top 0.5%</label>
+      <label class="chk" id="img-lbl" style="display:none"><input type="checkbox" id="img-chk" checked> tissue image</label></div>
+    <div class="panel-ctrl tools" style="flex:0 0 auto">
+      <span class="toolgrp" id="toolgrp">
+        <button class="hbtn on" data-tool="pan" title="Pan / zoom (shift-drag to select)">Pan</button>
+        <button class="hbtn" data-tool="box" title="Box select">Box</button>
+        <button class="hbtn" data-tool="lasso" title="Lasso select">Lasso</button>
+      </span>
+      <button class="hbtn" id="dl-left">⬇ Left</button><button class="hbtn" id="dl-right">⬇ Right</button>
+    </div>
+  </div>
+  <div id="docknav">
+    <button class="hbtn" data-panel="selection">Selection / DE</button>
+    <button class="hbtn" data-panel="crosstab">Composition</button>
+    <button class="hbtn" data-panel="dot">Dot plot</button>
+    <button class="hbtn" data-panel="heat">Heatmap</button>
+    <button class="hbtn" data-panel="violin">Violin</button>
+    <button class="hbtn" data-panel="count">Counts</button>
+    <button class="hbtn" data-panel="g2g">Gene vs gene</button>
+    <button class="hbtn" data-panel="gset">Gene set</button>
+    <button class="hbtn" data-panel="notes">Notes</button>
+    <span id="plugin-nav"></span>
+  </div>
+  <div id="marker-pop"><span class="mk-close" id="mk-close">✕</span><h4 id="mk-title"></h4><div id="mk-list"></div></div>
+  <div id="body">
+    <div id="umaps"></div>
+    <div id="dock"></div>
+  </div>
+</div>
+<div id="tooltip"></div>
+<div id="loading" hidden><div class="lbox"><div id="load-msg">Loading…</div><div class="bar"><div id="load-bar"></div></div></div></div>
+<div id="dropveil" hidden>Drop an .h5ad or .scb file to open</div>
+<script type="module" src="/src/main.ts"></script>
+</body>
+</html>
