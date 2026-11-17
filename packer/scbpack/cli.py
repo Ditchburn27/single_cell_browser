@@ -36,6 +36,11 @@ def main(argv=None):
     p.add_argument("--default-annotation", help="obs column the viewer should colour by on open (default: chosen heuristically)")
     p.add_argument("--default-gene", help="gene the viewer should show on open (default: chosen heuristically)")
     p.add_argument("--default-embedding", help="obsm key the viewer should open with (default: chosen heuristically)")
+    p.add_argument("--markers", metavar="COLUMN",
+                   help="precompute one-vs-rest marker genes for this obs column and store them in the "
+                        "file, so the viewer shows them with no computation and no extra requests")
+    p.add_argument("--markers-top", type=int, default=30, metavar="N",
+                   help="genes kept per group with --markers (default 30)")
     p.add_argument("--obs-colors", action="append", metavar="COLUMN=UNS_KEY",
                    help="take an obs column's palette from a non-standard uns key, e.g. "
                         "--obs-colors 'Sub Cluster=sub_clust_colors'; repeatable")
@@ -46,7 +51,7 @@ def main(argv=None):
     pack(a.input, a.output, layers=tuple(a.layer or ["X"]), embeddings=a.embedding, genes=a.genes, max_cells=a.max_cells,
          quant=a.quant, obs_keep=a.obs_keep.split(",") if a.obs_keep else None, min_cells=a.min_cells, seed=a.seed,
          keep_markers=not a.no_keep_markers, defaults={k: v for k, v in defaults.items() if v},
-         obs_colors=obs_colors)
+         obs_colors=obs_colors, markers=a.markers, markers_top=a.markers_top)
 
 
 if __name__ == "__main__":

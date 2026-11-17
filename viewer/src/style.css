@@ -141,6 +141,7 @@ table.tbl tr.g:hover{background:var(--bg)}
 .help-card dt{font-weight:600;text-align:right;color:var(--txt)}
 .help-card dd{color:var(--mut)}
 .help-card kbd{font-family:ui-monospace,Menlo,monospace;font-size:11px;border:1px solid var(--bord);border-bottom-width:2px;border-radius:4px;padding:0 4px;background:var(--bg);color:var(--txt)}
+.help-note{color:var(--mut);font-size:12px;margin:-4px 0 14px;line-height:1.5}
 .help-foot{margin-top:20px;padding-top:12px;border-top:1px solid var(--bord);color:var(--mut);font-size:12px}
 .help-x{position:absolute;top:12px;right:14px;background:transparent;border:none;color:var(--mut);font-size:15px;cursor:pointer;line-height:1;padding:4px}
 .help-x:hover{color:var(--txt)}

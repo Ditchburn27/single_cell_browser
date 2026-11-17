@@ -7,6 +7,7 @@ import sys
 import numpy as np
 import pandas as pd
 import scipy.sparse as sp
+from scipy.special import erfc
 
 MAGIC = b"SCB1"
 
@@ -147,6 +148,97 @@ def _markers(adata, topn=60):
     if groupby not in adata.obs.columns:
         groupby = None
     return {"groupby": groupby, "groups": out}
+
+
+def _bh(p):
+    """Benjamini-Hochberg adjusted p-values."""
+    m = len(p)
+    if m == 0:
+        return p
+    order = np.argsort(p)
+    adj = p[order] * m / np.arange(1, m + 1)
+    adj = np.minimum.accumulate(adj[::-1])[::-1]
+    out = np.empty(m)
+    out[order] = np.clip(adj, 0, 1)
+    return out
+
+
+class _MarkerAccum:
+    """One-vs-rest Wilcoxon for every category of one obs column, gene by gene.
+
+    Each gene's values are ranked once and the ranks summed per group, so all groups
+    cost a single pass over the matrix. (The viewer's "Compute markers" button instead
+    re-reads the whole matrix once per group, which is why it is only usable on a
+    locally opened file.) Statistics match the viewer's `de()`: Wilcoxon z with tie
+    correction, log2 fold change on the expm1 scale with a 1e-3 floor, BH-adjusted p.
+    """
+
+    def __init__(self, codes, n_groups, n_genes):
+        self.codes = np.asarray(codes, dtype=np.int64)
+        self.n = len(self.codes)
+        self.K = int(n_groups)
+        # one extra bucket absorbs cells with no category; it is never reported
+        self.sizes = np.bincount(self.codes, minlength=self.K + 1).astype(np.float64)
+        self.z = np.zeros((n_genes, self.K + 1), dtype=np.float32)
+        self.lfc = np.zeros((n_genes, self.K + 1), dtype=np.float32)
+        self.p = np.ones((n_genes, self.K + 1), dtype=np.float64)
+        self.j = 0
+
+    def add(self, rows, vals):
+        j = self.j
+        self.j += 1
+        if j >= self.z.shape[0] or len(rows) == 0:
+            return
+        n, K = self.n, self.K
+        sizes = self.sizes
+        v = np.asarray(vals, dtype=np.float64)
+        nz = len(v)
+        zeros = n - nz
+        order = np.argsort(v, kind="stable")
+        vs = v[order]
+        uniq, inv, cnt = np.unique(vs, return_inverse=True, return_counts=True)
+        csum = np.concatenate([[0], np.cumsum(cnt)])
+        # all zeros tie below every positive value, so nonzero ranks start at `zeros`
+        avg = zeros + (csum[:-1] + csum[1:] + 1) / 2.0
+        ranks = np.empty(nz)
+        ranks[order] = avg[inv]
+        g = self.codes[np.asarray(rows, dtype=np.int64)]
+        rank_sum = np.bincount(g, weights=ranks, minlength=K + 1)
+        cnt_nz = np.bincount(g, minlength=K + 1).astype(np.float64)
+        rank_sum += (sizes - cnt_nz) * ((zeros + 1) / 2.0)
+        tie = (zeros ** 3 - zeros) + float(np.sum(cnt.astype(np.float64) ** 3 - cnt))
+        nA = sizes
+        nB = n - nA
+        mu = nA * (n + 1) / 2.0
+        var = nA * nB / 12.0 * ((n + 1) - tie / (n * (n - 1.0)))
+        sd = np.sqrt(np.maximum(var, 0.0))
+        zz = np.where(sd > 0, (rank_sum - mu) / np.where(sd > 0, sd, 1.0), 0.0)
+        e = np.expm1(v)
+        expA = np.bincount(g, weights=e, minlength=K + 1)
+        expB = e.sum() - expA
+        with np.errstate(divide="ignore", invalid="ignore"):
+            lfc = np.log2((expA / nA + 1e-3) / (expB / nB + 1e-3))
+        ok = (nA >= 1) & (nB >= 1)
+        self.z[j] = np.where(ok, zz, 0.0)
+        self.lfc[j] = np.where(ok, np.nan_to_num(lfc), 0.0)
+        self.p[j] = erfc(np.abs(self.z[j]) / np.sqrt(2.0))
+
+    def finish(self, groupby, categories, gene_names, topn=30):
+        groups = {}
+        for k, name in enumerate(categories):
+            key = str(name).strip()
+            nA = self.sizes[k]
+            if nA < 3 or nA > self.n - 3:
+                groups[key] = []
+                continue
+            padj = _bh(self.p[:, k])
+            z = self.z[:, k]
+            lfc = self.lfc[:, k]
+            cand = np.flatnonzero(lfc > 0)
+            cand = cand[np.argsort(-z[cand])][:topn]
+            groups[key] = [{"gene": str(gene_names[i]), "score": float(z[i]),
+                            "lfc": float(lfc[i]), "padj": float(padj[i])} for i in cand]
+        return {"groupby": groupby, "groups": groups}
 
 
 def _spatial(adata, out):
@@ -310,7 +402,7 @@ def _resolve_defaults(requested, obs_cols, gene_names, emb_names):
 
 def pack(path, out_path, layers=("X",), embeddings=None, genes="all", max_cells=0, quant="auto",
          obs_keep=None, min_cells=0, seed=0, chunk=20000, keep_markers=True, name=None,
-         defaults=None, obs_colors=None):
+         defaults=None, obs_colors=None, markers=None, markers_top=30):
     import anndata
 
     _log("reading %s (backed)…" % path)
@@ -355,7 +447,18 @@ def pack(path, out_path, layers=("X",), embeddings=None, genes="all", max_cells=
         dim = min(arr.shape[1], 10)
         embs.append({"name": k, "dim": int(dim), "data": out.add(np.ascontiguousarray(arr[:, :dim], dtype="<f4").tobytes())})
     header["embeddings"] = embs
-    header["markers"] = _markers(adata)
+    accum = None
+    mk_cats = mk_codes = None
+    if markers:
+        if markers not in obs.columns:
+            _log("  WARNING: --markers column %r not found; skipping marker computation" % markers)
+        else:
+            cat = obs[markers].astype("category")
+            mk_cats = list(cat.cat.categories)
+            mk_codes = np.asarray(cat.cat.codes, dtype=np.int64)
+            mk_codes[mk_codes < 0] = len(mk_cats)  # uncategorised cells, never reported
+            _log("  markers: one-vs-rest Wilcoxon over %d group(s) of %r" % (len(mk_cats), markers))
+    header["markers"] = None if markers else _markers(adata)
     marker_genes = set()
     if keep_markers and header["markers"]:
         for rows in header["markers"]["groups"].values():
@@ -392,6 +495,8 @@ def pack(path, out_path, layers=("X",), embeddings=None, genes="all", max_cells=
             selected |= np.array([g in marker_genes for g in var_names])
         gidx = np.flatnonzero(selected)
         _log("  keeping %d / %d genes" % (len(gidx), G))
+        if mk_codes is not None and accum is None and not layer_entries:
+            accum = _MarkerAccum(mk_codes, len(mk_cats), len(gidx))
 
         q = quant
         if q == "auto":
@@ -404,6 +509,8 @@ def pack(path, out_path, layers=("X",), embeddings=None, genes="all", max_cells=
                 a_, b_ = M.indptr[j], M.indptr[j + 1]
                 offsets[first + j] = out.pos
                 out.add(_gene_block(M.indices[a_:b_], M.data[a_:b_], q), level=4)
+                if accum is not None:
+                    accum.add(M.indices[a_:b_], M.data[a_:b_])
 
         _log("  pass 2: writing gene blocks…")
         if fmt == "csc":
@@ -434,6 +541,10 @@ def pack(path, out_path, layers=("X",), embeddings=None, genes="all", max_cells=
         })
         _log("  layer %s written (%.1f MB)" % (spec, (out.pos - pos0) / 1e6))
     header["layers"] = layer_entries
+    if accum is not None:
+        header["markers"] = accum.finish(markers, mk_cats, first_layer_genes, markers_top)
+        kept = sum(1 for v in header["markers"]["groups"].values() if v)
+        _log("  markers: %d / %d group(s) with ranked genes" % (kept, len(mk_cats)))
     header["meta"] = {"species": _guess_species(list(adata.var_names)), "geneLabelCol": None,
                       "spatial": _spatial(adata, out)}
     if defaults:

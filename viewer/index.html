@@ -127,14 +127,34 @@
         or any annotation group, against the rest or another group. Ranked table plus a volcano plot, with all
         genes downloadable as CSV. Selections can be exported as cell IDs or saved as a new annotation column.</dd>
       <dt>Composition</dt><dd>Stacked bars of one annotation within another, as proportions or counts.</dd>
-      <dt>Dot plot / Heatmap</dt><dd>Top markers per group or your own gene list. <i>Compute markers</i> runs
-        one-vs-rest differential expression for every group.</dd>
+      <dt>Dot plot / Heatmap</dt><dd>Top markers per group or your own gene list. Many datasets already carry
+        marker genes, computed when the file was packed. <i>Compute markers</i> recomputes them in the browser
+        for any annotation &mdash; available when you open a local file.</dd>
       <dt>Violin</dt><dd>Gene expression or any numeric column, split by an annotation.</dd>
       <dt>Cell counts</dt><dd>Bar chart of cells per group, sorted by count or name.</dd>
       <dt>Gene vs gene</dt><dd>Scatter of two genes with a correlation, points coloured by the left pane.</dd>
       <dt>Gene set score</dt><dd>Mean expression of a list of genes, shown in the right pane.</dd>
       <dt>Group notes</dt><dd>Free text per group &mdash; useful while annotating. Exportable.</dd>
     </dl>
+
+    <h3>How the statistics work</h3>
+    <dl>
+      <dt>Differential expression</dt><dd>A <b>Wilcoxon rank-sum test</b> of group A against group B, or against
+        every other cell when no second group is given. Non-detected cells are kept rather than filtered, and
+        all share the lowest ranks; the variance is tie-corrected. The p-value is two-sided from the normal
+        approximation and is adjusted across genes by the Benjamini&ndash;Hochberg procedure. A Welch
+        <i>t</i> statistic is reported beside it for reference.</dd>
+      <dt>Log fold change</dt><dd>log<sub>2</sub> of the ratio of group means taken on the <b>de-logged</b> scale
+        (<code>expm1</code>), with a small floor added to each mean so that genes absent from one group stay
+        finite. Computed from the values as currently transformed.</dd>
+      <dt>% detected</dt><dd>Fraction of cells in the group with a non-zero value for that gene.</dd>
+      <dt>Top markers</dt><dd>Per group, genes with a positive log fold change ranked by the Wilcoxon statistic,
+        keeping the strongest few. Precomputed markers stored in the file use this same definition, so they
+        match what <i>Compute markers</i> would produce.</dd>
+    </dl>
+    <p class="help-note">Marker finding reads every gene in the matrix, once per group. On a file opened from your
+      own disk that is quick. For a dataset served over the network it would mean one request per gene per group,
+      so <i>Compute markers</i> is offered only for local files and precomputed markers are used instead.</p>
 
     <h3>Getting things out</h3>
     <dl>
@@ -145,7 +165,8 @@
         the original file with <code>scbpack apply-annotations</code>.</dd>
     </dl>
 
-    <p class="help-foot">Nothing is uploaded &mdash; the file is read locally in your browser.</p>
+    <p class="help-foot">Nothing you open is uploaded &mdash; a file you choose is read locally in your
+      browser, and a hosted dataset is streamed read-only from its server.</p>
   </div>
 </div>
 <div id="tooltip"></div>

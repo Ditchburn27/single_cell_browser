@@ -222,7 +222,15 @@ function dotPanel(app: App, kind: 'dot' | 'heat'): Panel {
   grp.onchange = src.onchange = nIn.onchange = custom.oninput = () => p.refresh();
   if (scale) scale.onchange = () => p.refresh();
   s.q('[data-act=svg]').onclick = () => chart && exportSvg(chart, `${kind}plot_${grp.value}.svg`);
-  s.q('[data-act=compute]').onclick = () => app.guard(async () => { await computeMarkers(app, grp.value); src.value = 'markers'; p.refresh(); });
+  const computeBtn = s.q<HTMLButtonElement>('[data-act=compute]');
+  if (app.remote) {
+    // Marker finding reads every gene once per group; over HTTP that is one request per
+    // gene per group. Precomputed markers (scbpack --markers) cover the hosted case.
+    computeBtn.disabled = true;
+    computeBtn.title = 'Computing markers reads the whole matrix once per group, which is impractical for a dataset served over the network. Open the .h5ad locally to compute them, or use the markers stored in the file.';
+  } else {
+    computeBtn.onclick = () => app.guard(async () => { await computeMarkers(app, grp.value); src.value = 'markers'; p.refresh(); });
+  }
   s.el.addEventListener('resized', () => p.refresh());
   fill(grp, catKeys(app), app.markers?.groupby ?? app.leftObs);
   return p;

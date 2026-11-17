@@ -1,6 +1,6 @@
 // Cross-language check on a real packed file: scbpack (Python) -> viewer reader (TS).
 //   SCB=/tmp/full_umap.scb REF=/tmp/scb_ref.json npx vitest run tests/real-scb.test.ts
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
 import { existsSync, openSync, readSync, fstatSync, readFileSync } from 'node:fs';
 import { readScb, type ByteSource } from '../src/data/scb';
 import { pickAnnotation, pickGene, pickEmbedding } from '../src/state/defaults';
@@ -13,10 +13,17 @@ function fileSource(path: string): ByteSource {
   return { size: fstatSync(fd).size, read: (o, l) => { const b = new Uint8Array(l); readSync(fd, b, 0, l, o); return b; } };
 }
 
-describe.skipIf(!existsSync(scbPath) || !existsSync(refPath))('.scb from scbpack read by the viewer', () => {
-  const ref = JSON.parse(readFileSync(refPath, 'utf8'));
-  const scb = readScb(fileSource(scbPath), 'full_umap.scb');
-  const p = scb.payload;
+const havePacked = !!scbPath && !!refPath && existsSync(scbPath) && existsSync(refPath);
+
+describe.skipIf(!havePacked)('.scb from scbpack read by the viewer', () => {
+  // Loaded in beforeAll, not at collection time: a skipped suite still evaluates this
+  // callback, so reading the fixtures here would fail the run wherever they are absent.
+  let ref: any, scb: ReturnType<typeof readScb>, p: ReturnType<typeof readScb>['payload'];
+  beforeAll(() => {
+    ref = JSON.parse(readFileSync(refPath, 'utf8'));
+    scb = readScb(fileSource(scbPath), 'full_umap.scb');
+    p = scb.payload;
+  });
 
   it('header: cells, obs columns, embedding', () => {
     expect(p.n).toBe(ref.nCells);

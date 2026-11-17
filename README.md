@@ -44,6 +44,22 @@ scbpack big.h5ad -o big.scb --default-annotation 'Major Cluster' --default-gene 
 `--default-embedding` does the same for the obsm key. Names are matched case-insensitively and checked
 against what was actually packed, so a typo warns at pack time instead of being silently ignored.
 
+Marker genes can be computed once at pack time instead of in the browser:
+
+```bash
+scbpack big.h5ad -o big.scb --markers 'Major Cluster'      # --markers-top N, default 30
+```
+
+Each gene is ranked once and the ranks summed per group, so every group costs a single pass over the
+matrix (154k cells x 28k genes x 19 groups adds about a minute and 46 KB to the file). The statistics
+match the viewer's own *Compute markers* - one-vs-rest Wilcoxon with tie correction, log fold change on
+the `expm1` scale, Benjamini-Hochberg adjusted - so the stored result is what that button would produce.
+Files that already carry `sc.tl.rank_genes_groups` are picked up without this flag.
+
+This matters for a dataset served over HTTP: *Compute markers* reads every gene once per group, which is
+one request per gene per group, so the viewer offers it only for a locally opened file and uses the
+stored markers otherwise.
+
 Colours come from `uns['<col>_colors_dict']` (keyed by category name, preferred) or `uns['<col>_colors']`
 (positional). For a palette stored under some other key, name it:
 
@@ -67,7 +83,7 @@ scbpack apply-annotations my_dataset_annotations.json original.h5ad -o annotated
 cd viewer
 npm install
 npm run dev          # http://localhost:5173
-npm test             # vitest: reader, CSR→CSC, .scb cross-language round trip, DE vs scipy
+npm test             # vitest: reader, CSR→CSC, .scb cross-language round trip, DE vs scipy, dev-server ranges
 npm run build        # → dist/ (static; the h5wasm worker is ~4.8 MB)
 ```
 
@@ -99,9 +115,30 @@ request per section and per gene. Point it at one with `?data=`:
 https://your-site.workers.dev/?data=/data/big.scb
 ```
 
+Try it locally first - the dev server speaks `HEAD` and `Range`, so this is the same path the browser takes
+in production:
+
+```bash
+npm run build
+node scripts/serve-dist.mjs --data /path/to/folder/with/scb   # /data -> that folder
+# http://localhost:4173/?data=/data/big.scb
+```
+
 An individual static asset file is capped at 25 MiB, so anything larger lives in R2. `worker/index.js` serves
-`/data/<key>` from an R2 bucket with `HEAD` and `Range` support and hands every other path to the static assets;
-`wrangler.toml` binds the bucket as `DATA`.
+`/data/<key>` from an R2 bucket with `HEAD` and `Range` support and hands every other path to the static assets.
+
+The R2 binding in `wrangler.toml` is commented out, so a default deploy is a plain static site and `/data/*`
+simply 404s. To serve a dataset from R2, create a bucket, uncomment the binding and name it:
+
+```bash
+npx wrangler r2 bucket create my-datasets
+# wrangler.toml:  [[r2_buckets]]  binding = "DATA"  bucket_name = "my-datasets"
+npx wrangler r2 object put my-datasets/big.scb --file big.scb    # up to ~315 MB
+```
+
+`wrangler r2 object put` refuses files much over 315 MB; for a larger `.scb` use an S3 client against the R2
+endpoint (rclone, `aws s3`). With rclone, pass `--s3-no-check-bucket` - without it the upload tries to create
+the bucket and fails with `403 AccessDenied`.
 
 Two things worth knowing:
 

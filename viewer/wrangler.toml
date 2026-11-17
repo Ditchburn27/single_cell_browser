@@ -12,7 +12,10 @@ not_found_handling = "single-page-application"
 # letting the Worker reach R2. Needs wrangler >= 4.20.0.
 run_worker_first = ["/data/*"]
 
-# Packed datasets. Create once with:  npx wrangler r2 bucket create anndata-browser-data
-[[r2_buckets]]
-binding = "DATA"
-bucket_name = "anndata-browser-data"
+# Optional: serve packed .scb datasets from R2 at /data/<key>, so the viewer can open them with
+# ?data=/data/<key>. Uncomment and set your own bucket name, then create it once with:
+#     npx wrangler r2 bucket create <your-bucket>
+# Without this binding the Worker simply 404s /data/* and the site behaves as a static deploy.
+# [[r2_buckets]]
+# binding = "DATA"
+# bucket_name = "your-bucket-name"

@@ -35,6 +35,8 @@ export class App implements PaneHost {
   selection: Uint8Array | null = null;
   selCount = 0;
   markers: Markers | null = null;
+  /** dataset was opened from a URL rather than a local file */
+  remote = false;
   dock!: Dock;
   private tissue: { bitmap: ImageBitmap; w: number; h: number } | null = null;
   private geneIdx = new Map<string, number>();
@@ -54,6 +56,7 @@ export class App implements PaneHost {
     try {
       const onProg = (m: string, f?: number) => this.showLoading(m, f ?? null);
       const ds = src instanceof File ? await this.client.open(src, onProg) : await this.client.openUrl(src.url, onProg);
+      this.remote = !(src instanceof File);
       this.ds = ds;
       await this.init();
       $('welcome').hidden = true; $('app').hidden = false;

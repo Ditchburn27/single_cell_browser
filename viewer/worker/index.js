@@ -19,6 +19,10 @@ export default {
     const url = new URL(request.url);
     if (!url.pathname.startsWith(PREFIX)) return env.ASSETS.fetch(request);
 
+    // No R2 bucket bound (the binding is optional in wrangler.toml): behave as a plain static
+    // site rather than throwing, so a default deploy works without any R2 setup.
+    if (!env.DATA) return notFound();
+
     const key = decodeURIComponent(url.pathname.slice(PREFIX.length));
     if (!key || key.includes('..')) return notFound();
     if (request.method !== 'GET' && request.method !== 'HEAD')
