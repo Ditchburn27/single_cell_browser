@@ -61,9 +61,9 @@
       <label class="chk" id="img-lbl" style="display:none"><input type="checkbox" id="img-chk" checked> tissue image</label></div>
     <div class="panel-ctrl tools" style="flex:0 0 auto">
       <span class="toolgrp" id="toolgrp">
-        <button class="hbtn on" data-tool="pan" title="Pan / zoom (shift-drag to select)">Pan</button>
-        <button class="hbtn" data-tool="box" title="Box select">Box</button>
-        <button class="hbtn" data-tool="lasso" title="Lasso select">Lasso</button>
+        <button class="hbtn on" data-tool="pan" title="Drag to pan, scroll to zoom. Shift-drag selects. Click again to turn off and clear the selection">Pan</button>
+        <button class="hbtn" data-tool="box" title="Drag a rectangle to select cells. Click again to turn off and clear the selection">Box</button>
+        <button class="hbtn" data-tool="lasso" title="Draw a freehand loop to select cells. Click again to turn off and clear the selection">Lasso</button>
       </span>
       <button class="hbtn" id="dl-left" title="Download the left pane as an image">⬇ Left</button><button class="hbtn" id="dl-right" title="Download the right pane as an image">⬇ Right</button>
     </div>
@@ -108,7 +108,9 @@
     <h3>Moving around</h3>
     <dl>
       <dt>Pan / Box / Lasso</dt><dd>Drag to pan and scroll to zoom, or draw a box or freehand loop to select cells.
-        Shortcuts: <kbd>p</kbd> pan, <kbd>b</kbd> box, <kbd>l</kbd> lasso.</dd>
+        Clicking the active tool turns it off: with none of the three lit the plot still pans, the selection is
+        cleared and you are back to the whole dataset. Shortcuts: <kbd>p</kbd> pan, <kbd>b</kbd> box,
+        <kbd>l</kbd> lasso.</dd>
       <dt>Selecting</dt><dd>Shift-drag selects with any tool. <kbd>&#8984;</kbd>/<kbd>Ctrl</kbd>-drag adds to the
         selection, <kbd>Alt</kbd>-drag removes, <kbd>Esc</kbd> clears.</dd>
       <dt>Touch</dt><dd>Drag with one finger to pan, pinch with two to zoom, double-tap to reset.
@@ -117,7 +119,9 @@
       <dt>Sync zoom</dt><dd>Keeps both panes on the same view. Double-click a plot, or press Reset view, to zoom back out.</dd>
       <dt>Z / Labels / Point size</dt><dd>Draw order for overplotted points, on-plot group labels, and point and label sizing.</dd>
       <dt>Legend</dt><dd>Shows cell counts per group. Click a label to hide or show it, double-click to show only
-        that group, click the swatch to change its colour. A <b>&#9656;</b> marks groups with marker genes &mdash; click it for the top ones.</dd>
+        that group, click the swatch to change its colour. Clicking the last group still visible &mdash; or
+        double-clicking the one already on its own &mdash; brings every group back, so you can always get to the
+        full dataset. A <b>&#9656;</b> marks groups with marker genes &mdash; click it for the top ones.</dd>
       <dt>Hover</dt><dd>Point tooltips give the cell's annotations and the current gene's value.</dd>
     </dl>
 

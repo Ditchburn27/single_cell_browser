@@ -2,6 +2,7 @@ import { DataClient } from './data/client';
 import { catFromValues, isCat, isNum, type CatCol, type DatasetPayload, type LayerInfo, type MarkerRow, type Markers, type ObsCol } from './data/schema';
 import type { Transform } from './data/compute';
 import { PaneView, type ColorSpec, type Composition, type PaneHost, type Tool } from './ui/pane';
+import { toggleHidden, isolate } from './state/legend';
 import {
   COLORMAPS, categoryColors, rgbaForCategories, rgbaForValues, valueRange, type MapName,
 } from './render/color';
@@ -360,12 +361,15 @@ export class App implements PaneHost {
     tip.style.left = Math.min(ev.clientX + 14, innerWidth - 330) + 'px'; tip.style.top = Math.min(ev.clientY + 14, innerHeight - 180) + 'px';
   }
   onLegendToggle(p: PaneView, code: number) {
-    if (code >= 0) { if (p.hidden.has(code)) p.hidden.delete(code); else p.hidden.add(code); }
+    if (code >= 0) {
+      const s = p.spec;
+      toggleHidden(p.hidden, code, s?.type === 'cat' ? s.col.categories.length : 0);
+    }
     this.composeAll();
   }
   onLegendIsolate(p: PaneView, code: number) {
     const s = p.spec; if (s?.type !== 'cat') return;
-    p.hidden.clear(); s.col.categories.forEach((_, k) => { if (k !== code) p.hidden.add(k); });
+    isolate(p.hidden, code, s.col.categories.length);
     this.composeAll();
   }
   onLegendColor(p: PaneView, code: number, hex: string) {
@@ -418,8 +422,12 @@ export class App implements PaneHost {
     on('dl-left', 'click', () => this.downloadPane(0));
     on('dl-right', 'click', () => this.downloadPane(1));
     document.querySelectorAll<HTMLButtonElement>('#toolgrp button').forEach((b) => b.addEventListener('click', () => {
-      this.currentTool = b.dataset.tool as Tool;
-      document.querySelectorAll('#toolgrp button').forEach((x) => x.classList.toggle('on', x === b));
+      // Clicking the armed tool disarms it. With no tool armed the canvas still pans, and the
+      // current selection is dropped, so "nothing selected" means the whole dataset again.
+      const off = this.currentTool === (b.dataset.tool as Tool);
+      this.currentTool = off ? 'none' : (b.dataset.tool as Tool);
+      document.querySelectorAll('#toolgrp button').forEach((x) => x.classList.toggle('on', !off && x === b));
+      if (off) this.setSelection(null);
       this.panes.forEach((p) => p.refreshCursor());
     }));
     $('mk-close').onclick = () => ($('marker-pop').style.display = 'none');
