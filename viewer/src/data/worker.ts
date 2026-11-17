@@ -3,7 +3,7 @@
 import * as h5wasm from 'h5wasm';
 import { readH5adMeta, type ReadResult } from './h5ad-reader';
 import { openSource, TooBigError, type GeneSource } from './gene-source';
-import { blobSource, readScb, type ScbFile } from './scb';
+import { blobSource, httpSource, readScb, type ScbFile } from './scb';
 import { computeTotals, de, denseGene, geneSetScore, groupStats, type Computer, type Transform } from './compute';
 import type { DatasetPayload } from './schema';
 
@@ -29,9 +29,23 @@ function collectBuffers(p: DatasetPayload): Transferable[] {
   return out;
 }
 
-async function openFile(id: number, f: File) {
+export type OpenInput = File | { url: string };
+
+async function openFile(id: number, input: OpenInput) {
   if (file) { try { file.close(); } catch { /* ignore */ } file = null; }
   sources.clear(); totalsCache.clear(); scb = null; read = null;
+  if (!(input instanceof File)) {
+    // Served over HTTP: only .scb, whose layout is designed for range reads. A raw .h5ad is
+    // mounted through WORKERFS and needs a real File.
+    const abs = new URL(input.url, self.location.href);
+    const name = decodeURIComponent(abs.pathname.split('/').pop() || 'dataset.scb');
+    if (!/\.scb$/i.test(name))
+      throw new Error(`Only .scb files can be opened from a URL (got ${name}). Pack the .h5ad with scbpack first.`);
+    scb = readScb(httpSource(abs.href), name, progress(id));
+    payload = scb.payload;
+    return payload;
+  }
+  const f = input;
   if (/\.scb$/i.test(f.name)) {
     scb = readScb(blobSource(f), f.name, progress(id));
     payload = scb.payload;
@@ -83,7 +97,7 @@ self.onmessage = async (ev: MessageEvent) => {
   try {
     switch (m.type) {
       case 'open': {
-        const p = await openFile(id, m.file);
+        const p = await openFile(id, m.url ? { url: m.url as string } : (m.file as File));
         post({ id, type: 'result', result: p }, collectBuffers(p));
         break;
       }

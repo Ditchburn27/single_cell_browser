@@ -5,6 +5,37 @@ import type { CatCol, DatasetPayload, Embedding, LayerInfo, Markers, ObsCol, Spa
 
 export interface ByteSource { size: number; read(offset: number, length: number): Uint8Array }
 
+/** Range-request reader for a .scb served over HTTP.
+ *
+ *  Synchronous XHR is permitted inside a worker, so this satisfies ByteSource's synchronous
+ *  `read` contract exactly as the Blob reader does — nothing downstream changes. Only the
+ *  header, the per-cell sections and the gene blocks actually looked at are ever fetched.
+ */
+export function httpSource(url: string): ByteSource {
+  const head = new XMLHttpRequest();
+  head.open('HEAD', url, false);
+  head.send();
+  if (head.status >= 400) throw new Error(`Could not open ${url} — HTTP ${head.status}`);
+  const size = Number(head.getResponseHeader('Content-Length'));
+  if (!Number.isFinite(size) || size <= 0) throw new Error(`${url} did not report a size (Content-Length)`);
+  if ((head.getResponseHeader('Accept-Ranges') ?? '').toLowerCase() === 'none')
+    throw new Error(`${url} does not support HTTP Range requests, which this format needs`);
+  return {
+    size,
+    read(offset, length) {
+      const x = new XMLHttpRequest();
+      x.open('GET', url, false);
+      x.setRequestHeader('Range', `bytes=${offset}-${offset + length - 1}`);
+      x.responseType = 'arraybuffer';
+      x.send();
+      if (x.status === 200)
+        throw new Error(`${url} ignored a Range request and returned the whole file — the host must support HTTP Range`);
+      if (x.status !== 206) throw new Error(`HTTP ${x.status} reading ${url}`);
+      return new Uint8Array(x.response as ArrayBuffer);
+    },
+  };
+}
+
 /** Worker-side Blob reader (FileReaderSync). */
 export function blobSource(blob: Blob): ByteSource {
   const rd = new FileReaderSync();
@@ -17,7 +48,7 @@ interface LayerEntry { name: string; nGenes: number; quant: 'u8' | 'f16' | 'f32'
 interface Header {
   version: number; name: string; n: number; obsNames: Ref; obs: ObsEntry[];
   embeddings: { name: string; dim: number; data: Ref }[]; layers: LayerEntry[]; markers: Markers | null;
-  meta: { species: 'mouse' | 'human' | 'unknown'; geneLabelCol: string | null; spatial: null | { library: string; imageKey: string; scale: number; spotDiameter: number; width: number; height: number; rgb: Ref } };
+  meta: { species: 'mouse' | 'human' | 'unknown'; geneLabelCol: string | null; defaults?: { annotation?: string; gene?: string; embedding?: string }; spatial: null | { library: string; imageKey: string; scale: number; spotDiameter: number; width: number; height: number; rgb: Ref } };
 }
 
 const dec = new TextDecoder();
@@ -103,7 +134,7 @@ export function readScb(src: ByteSource, fileName: string, onProgress?: (m: stri
   return {
     payload: {
       name: header.name || fileName.replace(/\.scb$/i, ''), n, obsNames: json<string[]>(src, header.obsNames), obsOrder: order, obs, embeddings, layers,
-      markers: header.markers, meta: { species: header.meta.species, geneLabelCol: header.meta.geneLabelCol, source: 'scb', fileSize: src.size, spatial },
+      markers: header.markers, meta: { species: header.meta.species, geneLabelCol: header.meta.geneLabelCol, defaults: header.meta.defaults, source: 'scb', fileSize: src.size, spatial },
     },
     source(layer) {
       let s = sources.get(layer);

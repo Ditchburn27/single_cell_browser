@@ -14,7 +14,7 @@
     <p class="sub">Explore a single-cell dataset right in your browser.<br>Your file is read locally &mdash; nothing is uploaded.</p>
     <label class="bigbtn" for="file-input">Choose an .h5ad file</label>
     <input type="file" id="file-input" accept=".h5ad,.scb" hidden>
-    <p class="hint">or drop it anywhere on this page</p>
+    <p class="hint">or drop it anywhere on this page &middot; <a href="#" id="help-link">what can it do?</a></p>
     <div id="welcome-error" class="err" hidden></div>
     <details class="tips">
       <summary>What does my file need?</summary>
@@ -44,6 +44,7 @@
       <button class="hbtn" id="savebtn" title="Save the current view (colours, gene, zoom…) as a small JSON file">Save view</button>
       <button class="hbtn" id="loadbtn">Load view</button>
       <button class="hbtn" id="openbtn">Open file…</button>
+      <button class="hbtn" id="helpbtn" title="What everything does (?)">? Help</button>
     </div>
   </header>
   <div id="toolbar">
@@ -83,6 +84,68 @@
   <div id="body">
     <div id="umaps"></div>
     <div id="dock"></div>
+  </div>
+</div>
+<div id="help" hidden>
+  <div class="help-card" role="dialog" aria-modal="true" aria-labelledby="help-h">
+    <button class="help-x" id="help-close" title="Close (Esc)">&#10005;</button>
+    <h2 id="help-h">What everything does</h2>
+    <p class="help-lead">Two linked embeddings side by side. The <b>left</b> pane is coloured by an annotation,
+      the <b>right</b> by a gene (or a second annotation). Everything is computed in your browser.</p>
+
+    <h3>Choosing what to look at</h3>
+    <dl>
+      <dt>Colour left by</dt><dd>Annotation shown in the left pane &mdash; cell types, clusters, sample, any <code>obs</code> column.</dd>
+      <dt>Right pane</dt><dd>Switch the right pane between the selected gene and a second annotation.</dd>
+      <dt>Gene</dt><dd>Type to search; the right pane recolours. Expression comes from the current layer.</dd>
+      <dt>Highlight</dt><dd>Type a group name or value to dim everything else.</dd>
+      <dt>Layer</dt><dd>Pick <code>X</code>, <code>raw</code> or any stored layer. The second menu can apply a
+        log1p&nbsp;CP10k transform on the fly when the layer holds raw counts.</dd>
+      <dt>Colours</dt><dd>Colormap, an optional clip of the top 0.5% (stops one bright cell flattening the scale),
+        and the tissue image toggle for spatial data.</dd>
+    </dl>
+
+    <h3>Moving around</h3>
+    <dl>
+      <dt>Pan / Box / Lasso</dt><dd>Drag to pan and scroll to zoom, or draw a box or freehand loop to select cells.
+        Shortcuts: <kbd>p</kbd> pan, <kbd>b</kbd> box, <kbd>l</kbd> lasso.</dd>
+      <dt>Selecting</dt><dd>Shift-drag selects with any tool. <kbd>&#8984;</kbd>/<kbd>Ctrl</kbd>-drag adds to the
+        selection, <kbd>Alt</kbd>-drag removes, <kbd>Esc</kbd> clears.</dd>
+      <dt>Touch</dt><dd>Drag with one finger to pan, pinch with two to zoom, double-tap to reset.
+        A single tap inspects the nearest cell, standing in for the hover tooltip. Box and lasso
+        selection work by dragging once the matching tool is active.</dd>
+      <dt>Sync zoom</dt><dd>Keeps both panes on the same view. Double-click a plot, or press Reset view, to zoom back out.</dd>
+      <dt>Z / Labels / Point size</dt><dd>Draw order for overplotted points, on-plot group labels, and point and label sizing.</dd>
+      <dt>Legend</dt><dd>Shows cell counts per group. Click a label to hide or show it, double-click to show only
+        that group, click the swatch to change its colour. A <b>&#9656;</b> marks groups with marker genes &mdash; click it for the top ones.</dd>
+      <dt>Hover</dt><dd>Point tooltips give the cell's annotations and the current gene's value.</dd>
+    </dl>
+
+    <h3>Panels</h3>
+    <dl>
+      <dt>Selection &amp; differential expression</dt><dd>One-vs-rest or group-vs-group tests &mdash; selected cells
+        or any annotation group, against the rest or another group. Ranked table plus a volcano plot, with all
+        genes downloadable as CSV. Selections can be exported as cell IDs or saved as a new annotation column.</dd>
+      <dt>Composition</dt><dd>Stacked bars of one annotation within another, as proportions or counts.</dd>
+      <dt>Dot plot / Heatmap</dt><dd>Top markers per group or your own gene list. <i>Compute markers</i> runs
+        one-vs-rest differential expression for every group.</dd>
+      <dt>Violin</dt><dd>Gene expression or any numeric column, split by an annotation.</dd>
+      <dt>Cell counts</dt><dd>Bar chart of cells per group, sorted by count or name.</dd>
+      <dt>Gene vs gene</dt><dd>Scatter of two genes with a correlation, points coloured by the left pane.</dd>
+      <dt>Gene set score</dt><dd>Mean expression of a list of genes, shown in the right pane.</dd>
+      <dt>Group notes</dt><dd>Free text per group &mdash; useful while annotating. Exportable.</dd>
+    </dl>
+
+    <h3>Getting things out</h3>
+    <dl>
+      <dt>&#11015; Left / &#11015; Right</dt><dd>Download either embedding. Every panel chart also exports as SVG.</dd>
+      <dt>Save view / Load view</dt><dd>Writes a small JSON file with the colours, gene, zoom and panel state so you
+        can return to exactly this view, or send it to someone with the same dataset.</dd>
+      <dt>Export annotations</dt><dd>Annotations you create from selections come out as JSON. Merge them back into
+        the original file with <code>scbpack apply-annotations</code>.</dd>
+    </dl>
+
+    <p class="help-foot">Nothing is uploaded &mdash; the file is read locally in your browser.</p>
   </div>
 </div>
 <div id="tooltip"></div>

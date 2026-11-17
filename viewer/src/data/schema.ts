@@ -52,12 +52,21 @@ export interface SpatialInfo {
   rgba: Uint8ClampedArray | null;
 }
 
+/** Opening view recorded in the file itself (scbpack --default-annotation/--default-gene).
+ *  Anything absent or no longer present in the data falls back to the generic heuristics. */
+export interface DatasetDefaults {
+  annotation?: string;
+  gene?: string;
+  embedding?: string;
+}
+
 export interface DatasetMeta {
   species: 'mouse' | 'human' | 'unknown';
   geneLabelCol: string | null;
   source: 'h5ad' | 'scb';
   fileSize: number;
   spatial: SpatialInfo | null;
+  defaults?: DatasetDefaults;
 }
 
 export interface DatasetPayload {

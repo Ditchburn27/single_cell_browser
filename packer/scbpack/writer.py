@@ -52,7 +52,53 @@ def _guess_species(names):
     return "unknown"
 
 
-def _obs_column(name, s, uns):
+def _palette(name, cats, uns, override=None):
+    """Colours for a categorical column, in order of the categories actually packed.
+
+    Three sources, most explicit first:
+      1. `override` - an uns key given on the command line as --obs-colors 'Column=uns_key'.
+      2. uns['<column>_colors']      - positional list, the AnnData/scanpy convention.
+      3. uns['<column>_colors_dict'] - mapping category -> colour. Preferred when present
+         because it survives category reordering and subsetting: a dict may legitimately
+         carry more entries than this object has categories (e.g. a palette inherited from
+         a larger parent object), and each category is looked up by name.
+
+    Returns None rather than a partial palette - a positional list shorter than the
+    categories, or a dict missing some of them, would silently mis-colour the plot.
+    """
+    if uns is None:
+        return None
+
+    def _s(v):
+        return v.decode() if isinstance(v, bytes) else str(v)
+
+    def _from(key, explicit):
+        obj = uns.get(key)
+        if obj is None:
+            if explicit:
+                _log("  warning: --obs-colors %s=%s - no such uns key, ignoring" % (name, key))
+            return None
+        if hasattr(obj, "keys") and not isinstance(obj, (str, bytes)):
+            lut = {_s(k): _s(v) for k, v in dict(obj).items()}
+            missing = [c for c in cats if c not in lut]
+            if missing:
+                _log("  warning: uns[%r] has no colour for %d/%d categories of %r (e.g. %s)"
+                     % (key, len(missing), len(cats), name, ", ".join(missing[:3])))
+                return None
+            return [lut[c] for c in cats]
+        seq = list(obj)
+        if len(seq) < len(cats):
+            _log("  warning: uns[%r] has %d colours but %r has %d categories - ignoring"
+                 % (key, len(seq), name, len(cats)))
+            return None
+        return [_s(c) for c in seq[: len(cats)]]
+
+    if override:
+        return _from(override, True)
+    return _from(name + "_colors_dict", False) or _from(name + "_colors", False)
+
+
+def _obs_column(name, s, uns, color_key=None):
     """Return header entry (without section refs) and payload bytes for a pandas Series."""
     if pd.api.types.is_categorical_dtype(s) or s.dtype == object or pd.api.types.is_bool_dtype(s) or pd.api.types.is_string_dtype(s):
         if pd.api.types.is_bool_dtype(s):
@@ -66,9 +112,9 @@ def _obs_column(name, s, uns):
         codes = s.cat.codes.to_numpy()
         dtype = "i2" if len(cats) < 32000 else "i4"
         ent = {"kind": "cat", "categories": cats, "dtype": dtype}
-        colors = uns.get(name + "_colors") if uns is not None else None
-        if colors is not None and len(colors) >= len(cats):
-            ent["colors"] = [str(c) for c in list(colors)[: len(cats)]]
+        colors = _palette(name, cats, uns, color_key)
+        if colors:
+            ent["colors"] = colors
         return ent, [("codes", codes.astype("<" + dtype).tobytes())]
     if pd.api.types.is_numeric_dtype(s):
         arr = pd.to_numeric(s, errors="coerce").to_numpy(dtype="float32")
@@ -236,8 +282,35 @@ def _looks_like_counts(sample):
     return bool(len(v) and np.all(np.mod(v, 1) == 0))
 
 
+def _resolve_defaults(requested, obs_cols, gene_names, emb_names):
+    """Validate the opening view requested on the command line against what was actually packed.
+
+    Returns a dict with only the keys that resolved; warns about the ones that did not, so a
+    typo in a column or gene name is visible at pack time rather than silently ignored later.
+    Matching is exact first, then case-insensitive, so --default-gene rorb finds RORB.
+    """
+    out = {}
+    for key, want, pool, label in (
+        ("annotation", requested.get("annotation"), obs_cols, "obs column"),
+        ("gene", requested.get("gene"), gene_names, "gene"),
+        ("embedding", requested.get("embedding"), emb_names, "embedding"),
+    ):
+        if not want:
+            continue
+        hit = want if want in pool else next((c for c in pool if c.lower() == want.lower()), None)
+        if hit is None:
+            _log("  warning: default %s %r not found among %d %ss — ignoring"
+                 % (key, want, len(pool), label))
+            continue
+        if hit != want:
+            _log("  default %s %r matched %r" % (key, want, hit))
+        out[key] = hit
+    return out
+
+
 def pack(path, out_path, layers=("X",), embeddings=None, genes="all", max_cells=0, quant="auto",
-         obs_keep=None, min_cells=0, seed=0, chunk=20000, keep_markers=True, name=None):
+         obs_keep=None, min_cells=0, seed=0, chunk=20000, keep_markers=True, name=None,
+         defaults=None, obs_colors=None):
     import anndata
 
     _log("reading %s (backed)…" % path)
@@ -257,7 +330,7 @@ def pack(path, out_path, layers=("X",), embeddings=None, genes="all", max_cells=
     cols = []
     for c in keep:
         try:
-            ent, parts = _obs_column(c, obs[c], uns)
+            ent, parts = _obs_column(c, obs[c], uns, (obs_colors or {}).get(c))
         except Exception as e:  # pragma: no cover
             _log("  skipping obs column %s: %s" % (c, e))
             continue
@@ -271,6 +344,8 @@ def pack(path, out_path, layers=("X",), embeddings=None, genes="all", max_cells=
         cols.append(ent)
     header["obs"] = cols
     _log("  %d cells, %d obs columns" % (n, len(cols)))
+    tinted = [c["name"] for c in cols if c.get("colors")]
+    _log("  palettes kept for %d column(s): %s" % (len(tinted), ", ".join(tinted) or "none"))
 
     # embeddings
     emb_names = embeddings or [k for k in adata.obsm.keys() if np.asarray(adata.obsm[k]).ndim == 2 and np.asarray(adata.obsm[k]).shape[1] >= 2]
@@ -288,6 +363,7 @@ def pack(path, out_path, layers=("X",), embeddings=None, genes="all", max_cells=
 
     # expression layers
     layer_entries = []
+    first_layer_genes = []
     for spec in layers:
         X, var_names = _layer_matrix(adata, spec)
         G = len(var_names)
@@ -348,13 +424,23 @@ def pack(path, out_path, layers=("X",), embeddings=None, genes="all", max_cells=
             M = sp.vstack(parts, format="csc"); M.sort_indices()
             write_csc(M, 0)
         offsets[len(gidx)] = out.pos
+        kept_names = [var_names[i] for i in gidx]
+        if not first_layer_genes:
+            first_layer_genes = kept_names
         layer_entries.append({
             "name": spec, "nGenes": int(len(gidx)), "quant": q, "looksLikeCounts": bool(counts_like),
-            "varNames": out.add_json([var_names[i] for i in gidx]),
+            "varNames": out.add_json(kept_names),
             "index": out.add(offsets.tobytes()),
         })
         _log("  layer %s written (%.1f MB)" % (spec, (out.pos - pos0) / 1e6))
     header["layers"] = layer_entries
-    header["meta"] = {"species": _guess_species(list(adata.var_names)), "geneLabelCol": None, "spatial": _spatial(adata, out)}
+    header["meta"] = {"species": _guess_species(list(adata.var_names)), "geneLabelCol": None,
+                      "spatial": _spatial(adata, out)}
+    if defaults:
+        resolved = _resolve_defaults(defaults, [c["name"] for c in cols], first_layer_genes,
+                                     [e["name"] for e in embs])
+        if resolved:
+            header["meta"]["defaults"] = resolved
+            _log("  opening view: " + ", ".join("%s=%s" % kv for kv in sorted(resolved.items())))
     out.finish(header)
     _log("wrote %s (%.1f MB)" % (out_path, out.pos / 1e6))

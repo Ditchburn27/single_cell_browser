@@ -33,11 +33,20 @@ def main(argv=None):
                    help="value precision: auto = f32 for integer counts, u8 (per-gene scaled) otherwise")
     p.add_argument("--obs-keep", help="comma-separated obs columns to keep (default: all)")
     p.add_argument("--no-keep-markers", action="store_true", help="do not force rank_genes_groups genes to be kept")
+    p.add_argument("--default-annotation", help="obs column the viewer should colour by on open (default: chosen heuristically)")
+    p.add_argument("--default-gene", help="gene the viewer should show on open (default: chosen heuristically)")
+    p.add_argument("--default-embedding", help="obsm key the viewer should open with (default: chosen heuristically)")
+    p.add_argument("--obs-colors", action="append", metavar="COLUMN=UNS_KEY",
+                   help="take an obs column's palette from a non-standard uns key, e.g. "
+                        "--obs-colors 'Sub Cluster=sub_clust_colors'; repeatable")
     p.add_argument("--seed", type=int, default=0)
     a = p.parse_args(argv)
+    defaults = {"annotation": a.default_annotation, "gene": a.default_gene, "embedding": a.default_embedding}
+    obs_colors = dict(x.split("=", 1) for x in (a.obs_colors or []))
     pack(a.input, a.output, layers=tuple(a.layer or ["X"]), embeddings=a.embedding, genes=a.genes, max_cells=a.max_cells,
          quant=a.quant, obs_keep=a.obs_keep.split(",") if a.obs_keep else None, min_cells=a.min_cells, seed=a.seed,
-         keep_markers=not a.no_keep_markers)
+         keep_markers=not a.no_keep_markers, defaults={k: v for k, v in defaults.items() if v},
+         obs_colors=obs_colors)
 
 
 if __name__ == "__main__":

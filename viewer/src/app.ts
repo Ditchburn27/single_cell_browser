@@ -49,10 +49,11 @@ export class App implements PaneHost {
   onSelectionChanged: Array<() => void> = [];
 
   // ---------------- loading ----------------
-  async load(file: File) {
+  async load(src: File | { url: string }) {
     this.showLoading('Opening file…', null);
     try {
-      const ds = await this.client.open(file, (m, f) => this.showLoading(m, f ?? null));
+      const onProg = (m: string, f?: number) => this.showLoading(m, f ?? null);
+      const ds = src instanceof File ? await this.client.open(src, onProg) : await this.client.openUrl(src.url, onProg);
       this.ds = ds;
       await this.init();
       $('welcome').hidden = true; $('app').hidden = false;
@@ -111,7 +112,7 @@ export class App implements PaneHost {
 
     // panes
     const umaps = $('umaps'); this.panes.forEach((p) => p.destroy()); this.panes = []; umaps.innerHTML = '';
-    const emb = pickEmbedding(ds.embeddings)!;
+    const emb = pickEmbedding(ds.embeddings, ds.meta.defaults?.embedding)!;
     this.panes = [new PaneView(umaps, 0, this), new PaneView(umaps, 1, this)];
     this.panes.forEach((p) => { p.setEmbeddings(ds.embeddings, emb.name); p.sc.pointSize = +$<HTMLInputElement>('ptsz').value; });
 
@@ -526,8 +527,8 @@ export class App implements PaneHost {
   }
   customAnnotations: string[] = [];
 
-  async open(file: File) {
-    try { await this.load(file); } catch (e) {
+  async open(src: File | { url: string }) {
+    try { await this.load(src); } catch (e) {
       this.hideLoading();
       const msg = (e as Error).message || String(e);
       if ($('app').hidden) { const box = $('welcome-error'); box.hidden = false; box.textContent = msg; } else alert(msg);

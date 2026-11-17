@@ -17,7 +17,11 @@ genes you actually look at are ever read (`Blob.slice()` locally, HTTP `Range` w
   * `embeddings[]`: `{name, dim, data}` (section: float32 LE, row-major `n x dim`)
   * `layers[]`: `{name, nGenes, quant: "u8"|"f16"|"f32", looksLikeCounts, varNames (section: JSON), index (section: float64 LE, nGenes+1 absolute block offsets)}`
   * `markers`: `{groupby, groups: {group: [{gene, score, lfc, padj}]}}` or `null`
-  * `meta`: `{species, geneLabelCol, spatial}`
+  * `meta`: `{species, geneLabelCol, spatial, defaults?}`
+    * `defaults`: `{annotation?, gene?, embedding?}` - the opening view, written by
+      `scbpack --default-annotation/--default-gene/--default-embedding`. Names are validated at pack
+      time against the columns, genes and embeddings actually kept. The viewer falls back to its
+      generic heuristics for anything absent.
 * **Gene block** `g` = bytes `[index[g], index[g+1])`, gzip of  
   `u32 nnz | f32 scale | u32 rowDelta[nnz] | values[nnz]`  
   rows are ascending; `rowDelta[0]` is the first row, the rest are differences. Values: `u8` → `byte / 255 * scale`,

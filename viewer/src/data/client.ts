@@ -30,6 +30,7 @@ export class DataClient {
   }
 
   open(file: File, prog?: Progress) { return this.call<DatasetPayload>({ type: 'open', file }, [], prog); }
+  openUrl(url: string, prog?: Progress) { return this.call<DatasetPayload>({ type: 'open', url }, [], prog); }
   prepare(layer: string, prog?: Progress) { return this.call<boolean>({ type: 'prepare', layer }, [], prog); }
   gene(layer: string, gene: number, transform: Transform, prog?: Progress) { return this.call<Float32Array>({ type: 'gene', layer, gene, transform }, [], prog); }
   geneSet(layer: string, genes: number[], transform: Transform, prog?: Progress) { return this.call<Float32Array>({ type: 'geneSet', layer, genes, transform }, [], prog); }
