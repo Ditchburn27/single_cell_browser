@@ -206,7 +206,7 @@ function dotPanel(app: App, kind: 'dot' | 'heat'): Panel {
       let names: string[], idx: number[];
       if (src.value === 'markers') { const r = app.resolveGenes(topMarkerGenes(app, +nIn.value || 3)); names = r.names; idx = r.idx; }
       else { const r = app.resolveGenes(custom.value.split(/[\s,;]+/)); names = r.names; idx = r.idx; }
-      if (!idx.length) { cv.width = cv.height = 0; cv.style.width = cv.style.height = '0'; s.body.dataset.msg = ''; hint(s.body, src.value === 'markers' && !app.markers ? 'No marker genes found in this file. Use “Compute markers” or switch to a custom gene list.' : 'Enter gene names above.'); return; }
+      if (!idx.length) { cv.width = cv.height = 0; cv.style.width = cv.style.height = '0'; s.body.dataset.msg = ''; hint(s.body, src.value === 'markers' && !app.markers ? (app.remote ? 'This dataset has no precomputed marker genes. Switch to a custom gene list, or open the .h5ad locally to compute them.' : 'No marker genes found in this file. Use “Compute markers” or switch to a custom gene list.') : 'Enter gene names above.'); return; }
       hint(s.body, '');
       const my = ++seq;
       const st = await app.client.groupStats(app.layerInfo.name, idx, c.codes, c.categories.length, app.transform);
@@ -224,10 +224,17 @@ function dotPanel(app: App, kind: 'dot' | 'heat'): Panel {
   s.q('[data-act=svg]').onclick = () => chart && exportSvg(chart, `${kind}plot_${grp.value}.svg`);
   const computeBtn = s.q<HTMLButtonElement>('[data-act=compute]');
   if (app.remote) {
-    // Marker finding reads every gene once per group; over HTTP that is one request per
-    // gene per group. Precomputed markers (scbpack --markers) cover the hosted case.
-    computeBtn.disabled = true;
-    computeBtn.title = 'Computing markers reads the whole matrix once per group, which is impractical for a dataset served over the network. Open the .h5ad locally to compute them, or use the markers stored in the file.';
+    // Marker finding reads every gene once per group; over HTTP that is one request per gene
+    // per group, so it is offered only for a locally opened file. Hosted datasets instead
+    // carry markers computed at pack time (scbpack --markers), so say so rather than
+    // showing a control that cannot be used.
+    const note = document.createElement('span');
+    note.className = 'pill';
+    note.textContent = app.markers ? 'markers precomputed' : 'no stored markers';
+    note.title = app.markers
+      ? `Marker genes were computed when this dataset was packed${app.markers.groupby ? ` (grouped by \u201c${app.markers.groupby}\u201d)` : ''}, so nothing is computed here. To rank markers for a different annotation, open the .h5ad locally.`
+      : 'This dataset was published without precomputed marker genes. Enter a custom gene list, or open the .h5ad locally to compute markers.';
+    computeBtn.replaceWith(note);
   } else {
     computeBtn.onclick = () => app.guard(async () => { await computeMarkers(app, grp.value); src.value = 'markers'; p.refresh(); });
   }

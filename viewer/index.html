@@ -38,12 +38,12 @@
       <div class="slider-wrap"><label>Point size</label><input type="range" id="ptsz" min="0.5" max="14" step="0.5" value="3"><span id="ptval">3</span></div>
       <div class="slider-wrap"><label>Label size</label><input type="range" id="lblsz" min="8" max="28" step="1" value="12"><span id="lblszval">12</span></div>
       <button class="hbtn" id="rbtn" title="Reset view (or double-click a plot)">Reset view</button>
-      <button class="hbtn on" id="syncbtn">Sync zoom: on</button>
+      <button class="hbtn on" id="syncbtn" title="Pan and zoom both panes together. Turn off to move them independently">Sync zoom: on</button>
       <button class="hbtn" id="zbtn" title="Draw order">Z: random</button>
-      <button class="hbtn on" id="lblbtn">Labels: on</button>
+      <button class="hbtn on" id="lblbtn" title="Show the category name on each group of cells">Labels: on</button>
       <button class="hbtn" id="savebtn" title="Save the current view (colours, gene, zoom…) as a small JSON file">Save view</button>
-      <button class="hbtn" id="loadbtn">Load view</button>
-      <button class="hbtn" id="openbtn">Open file…</button>
+      <button class="hbtn" id="loadbtn" title="Restore a view from a JSON file saved with Save view">Load view</button>
+      <button class="hbtn" id="openbtn" title="Open another .h5ad or .scb (or drop one on the page)">Open file…</button>
       <button class="hbtn" id="helpbtn" title="What everything does (?)">? Help</button>
     </div>
   </header>
@@ -65,19 +65,19 @@
         <button class="hbtn" data-tool="box" title="Box select">Box</button>
         <button class="hbtn" data-tool="lasso" title="Lasso select">Lasso</button>
       </span>
-      <button class="hbtn" id="dl-left">⬇ Left</button><button class="hbtn" id="dl-right">⬇ Right</button>
+      <button class="hbtn" id="dl-left" title="Download the left pane as an image">⬇ Left</button><button class="hbtn" id="dl-right" title="Download the right pane as an image">⬇ Right</button>
     </div>
   </div>
   <div id="docknav">
-    <button class="hbtn" data-panel="selection">Selection / DE</button>
-    <button class="hbtn" data-panel="crosstab">Composition</button>
-    <button class="hbtn" data-panel="dot">Dot plot</button>
-    <button class="hbtn" data-panel="heat">Heatmap</button>
-    <button class="hbtn" data-panel="violin">Violin</button>
-    <button class="hbtn" data-panel="count">Counts</button>
-    <button class="hbtn" data-panel="g2g">Gene vs gene</button>
-    <button class="hbtn" data-panel="gset">Gene set</button>
-    <button class="hbtn" data-panel="notes">Notes</button>
+    <button class="hbtn" data-panel="selection" title="Differential expression: selected cells or any group, against the rest or another group. Ranked table, volcano plot, CSV export">Selection / DE</button>
+    <button class="hbtn" data-panel="crosstab" title="Stacked bars of one annotation within another, as proportions or counts">Composition</button>
+    <button class="hbtn" data-panel="dot" title="Dot plot: mean expression and % of cells detected, per group, for marker genes or your own list">Dot plot</button>
+    <button class="hbtn" data-panel="heat" title="Heatmap of mean expression per group, for marker genes or your own list">Heatmap</button>
+    <button class="hbtn" data-panel="violin" title="Distribution of a gene or any numeric column, split by an annotation">Violin</button>
+    <button class="hbtn" data-panel="count" title="Bar chart of how many cells are in each group">Counts</button>
+    <button class="hbtn" data-panel="g2g" title="Scatter of two genes against each other with a correlation, coloured by the left pane">Gene vs gene</button>
+    <button class="hbtn" data-panel="gset" title="Score cells by the mean expression of a gene list and show it in the right pane">Gene set</button>
+    <button class="hbtn" data-panel="notes" title="Free text per group, for annotating as you go. Exportable">Notes</button>
     <span id="plugin-nav"></span>
   </div>
   <div id="marker-pop"><span class="mk-close" id="mk-close">✕</span><h4 id="mk-title"></h4><div id="mk-list"></div></div>
