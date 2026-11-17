@@ -1,6 +1,6 @@
 """Python-side checks:  python3 -m pytest tests/test_scbpack.py  (or run directly)."""
 import json, os, subprocess, sys, tempfile
-import numpy as np, anndata as ad
+import numpy as np, pandas as pd, anndata as ad
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, 'packer'))
 from scbpack.writer import pack  # noqa: E402
@@ -95,3 +95,75 @@ def test_pack_computes_markers():
         assert all(len(v) <= 5 for v in m['groups'].values())
         assert m['groups']['g1'][0]['gene'] == 'G7'
         assert m['groups']['g1'][0]['lfc'] > 0 and m['groups']['g1'][0]['padj'] < 0.01
+
+
+def _ordered_fixture(d, uns_key='stage_plot_order', order=('Fetal', 'Neonatal', 'Adult'),
+                     colors=None):
+    """Small object whose category order lives in uns, not in the categorical."""
+    import scipy.sparse as sp
+    rng = np.random.default_rng(3)
+    n = 60
+    labels = np.array(['Fetal', 'Neonatal', 'Adult'] * (n // 3))
+    a = ad.AnnData(sp.csr_matrix(rng.random((n, 12)).astype('float32')))
+    a.obs['stage'] = pd.Categorical(labels)          # pandas sorts these alphabetically
+    a.obsm['X_umap'] = rng.random((n, 2)).astype('float32')
+    a.uns[uns_key] = list(order)
+    if colors is not None:
+        a.uns['stage_colors'] = list(colors)
+    src = os.path.join(d, 'o.h5ad'); a.write_h5ad(src)
+    return src
+
+
+def _cats(out, name='stage'):
+    raw = open(out, 'rb').read()
+    hl = int.from_bytes(raw[-12:-4], 'little')
+    h = json.loads(raw[-12 - hl:-12])
+    return next(c for c in h['obs'] if c['name'] == name)
+
+
+def test_order_is_not_inferred_from_key_names():
+    """Without --obs-order the file's own category order is kept, even if a conventional key exists."""
+    with tempfile.TemporaryDirectory() as d:
+        src = _ordered_fixture(d)                       # stage_plot_order present in uns
+        out = os.path.join(d, 'x.scb')
+        pack(src, out)
+        assert _cats(out)['categories'] == ['Adult', 'Fetal', 'Neonatal']   # alphabetical
+
+
+def test_explicit_obs_order_key():
+    """--obs-order COLUMN=UNS_KEY applies the named order."""
+    with tempfile.TemporaryDirectory() as d:
+        src = _ordered_fixture(d, uns_key='my_funny_key')
+        out = os.path.join(d, 'x.scb')
+        pack(src, out, obs_order={'stage': 'my_funny_key'})
+        assert _cats(out)['categories'] == ['Fetal', 'Neonatal', 'Adult']
+
+
+def test_missing_order_key_is_ignored():
+    """Naming a uns key that does not exist keeps the file's order rather than failing."""
+    with tempfile.TemporaryDirectory() as d:
+        src = _ordered_fixture(d)
+        out = os.path.join(d, 'x.scb')
+        pack(src, out, obs_order={'stage': 'no_such_key'})
+        assert _cats(out)['categories'] == ['Adult', 'Fetal', 'Neonatal']
+
+
+def test_partial_order_is_refused():
+    """An order that does not name every category keeps the file's own order."""
+    with tempfile.TemporaryDirectory() as d:
+        src = _ordered_fixture(d, order=('Fetal', 'Neonatal'))      # 'Adult' missing
+        out = os.path.join(d, 'x.scb')
+        pack(src, out, obs_order={'stage': 'stage_plot_order'})
+        assert _cats(out)['categories'] == ['Adult', 'Fetal', 'Neonatal']   # alphabetical
+
+
+def test_positional_colors_follow_the_reorder():
+    """A positional uns['<col>_colors'] is permuted with the categories, not left behind."""
+    with tempfile.TemporaryDirectory() as d:
+        # colours are written against the alphabetical order Adult, Fetal, Neonatal
+        src = _ordered_fixture(d, colors=('#aa0000', '#00bb00', '#0000cc'))
+        out = os.path.join(d, 'x.scb')
+        pack(src, out, obs_order={'stage': 'stage_plot_order'})
+        ent = _cats(out)
+        assert ent['categories'] == ['Fetal', 'Neonatal', 'Adult']
+        assert ent['colors'] == ['#00bb00', '#0000cc', '#aa0000']   # each colour kept its label

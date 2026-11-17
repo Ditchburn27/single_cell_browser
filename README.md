@@ -65,6 +65,16 @@ log1p-CP10k transform and would otherwise have to read the whole matrix to get t
 per gene when the file is served over HTTP. A `.scb` written by an older version has none, and the viewer
 then declines the transform for a hosted dataset rather than issuing those requests.
 
+Category order defaults to the file's own. To display a categorical in a stored order - stages, timepoints,
+doses - name the `uns` key that holds it. The key must list exactly the categories present, otherwise the file's
+order is kept and a warning says why:
+
+```bash
+scbpack big.h5ad -o big.scb --obs-order 'Maturation Stage=stage_order'
+```
+
+Palettes are permuted with the categories, so each colour stays with its label.
+
 Colours come from `uns['<col>_colors_dict']` (keyed by category name, preferred) or `uns['<col>_colors']`
 (positional). For a palette stored under some other key, name it:
 

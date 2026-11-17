@@ -99,7 +99,29 @@ def _palette(name, cats, uns, override=None):
     return _from(name + "_colors_dict", False) or _from(name + "_colors", False)
 
 
-def _obs_column(name, s, uns, color_key=None):
+def _category_order(name, cats, uns, key=None):
+    """Display order for a categorical, read from an explicitly named `uns` key.
+
+    Only used when the caller asks for it with --obs-order COLUMN=UNS_KEY. Without the
+    flag the file's own category order is kept, so nothing is inferred from key names.
+    An order that does not name exactly the categories present is refused with a
+    warning rather than applied partially.
+    """
+    if not key or key not in uns:
+        if key:
+            _log("  warning: --obs-order key %r for %r is not in uns; keeping the file's order" % (key, name))
+        return None
+    want = [str(x) for x in list(uns[key])]
+    if sorted(want) != sorted(cats):
+        missing = [c for c in cats if c not in want]
+        _log("  warning: uns[%r] does not list the categories of %r (%d vs %d%s); keeping the file's order"
+             % (key, name, len(want), len(cats),
+                ", e.g. missing " + ", ".join(missing[:3]) if missing else ""))
+        return None
+    return None if want == cats else want
+
+
+def _obs_column(name, s, uns, color_key=None, order_key=None):
     """Return header entry (without section refs) and payload bytes for a pandas Series."""
     if pd.api.types.is_categorical_dtype(s) or s.dtype == object or pd.api.types.is_bool_dtype(s) or pd.api.types.is_string_dtype(s):
         if pd.api.types.is_bool_dtype(s):
@@ -110,10 +132,22 @@ def _obs_column(name, s, uns, color_key=None):
                 return {"kind": "str"}, [("values", json.dumps(["" if v is None else str(v) for v in vals]).encode())]
             s = vals.astype("category")
         cats = [str(c) for c in s.cat.categories]
+        # Resolve the palette against the ORIGINAL order first: a positional
+        # uns['<col>_colors'] is written in that order, so it has to be permuted with the
+        # categories rather than re-read afterwards.
+        colors = _palette(name, cats, uns, color_key)
+        order = _category_order(name, cats, uns, order_key)
+        if order:
+            perm = [cats.index(c) for c in order]
+            by_name = {str(c): c for c in s.cat.categories}
+            s = s.cat.reorder_categories([by_name[c] for c in order])
+            cats = order
+            if colors:
+                colors = [colors[i] for i in perm]
+            _log("  %r reordered from uns (%s)" % (name, ", ".join(cats[:4]) + ("…" if len(cats) > 4 else "")))
         codes = s.cat.codes.to_numpy()
         dtype = "i2" if len(cats) < 32000 else "i4"
         ent = {"kind": "cat", "categories": cats, "dtype": dtype}
-        colors = _palette(name, cats, uns, color_key)
         if colors:
             ent["colors"] = colors
         return ent, [("codes", codes.astype("<" + dtype).tobytes())]
@@ -402,7 +436,7 @@ def _resolve_defaults(requested, obs_cols, gene_names, emb_names):
 
 def pack(path, out_path, layers=("X",), embeddings=None, genes="all", max_cells=0, quant="auto",
          obs_keep=None, min_cells=0, seed=0, chunk=20000, keep_markers=True, name=None,
-         defaults=None, obs_colors=None, markers=None, markers_top=30):
+         defaults=None, obs_colors=None, obs_order=None, markers=None, markers_top=30):
     import anndata
 
     _log("reading %s (backed)…" % path)
@@ -422,7 +456,7 @@ def pack(path, out_path, layers=("X",), embeddings=None, genes="all", max_cells=
     cols = []
     for c in keep:
         try:
-            ent, parts = _obs_column(c, obs[c], uns, (obs_colors or {}).get(c))
+            ent, parts = _obs_column(c, obs[c], uns, (obs_colors or {}).get(c), (obs_order or {}).get(c))
         except Exception as e:  # pragma: no cover
             _log("  skipping obs column %s: %s" % (c, e))
             continue
