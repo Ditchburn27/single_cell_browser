@@ -253,7 +253,7 @@ export async function computeMarkers(app: App, key: string, topN = 30) {
   const c = app.ds.obs[key]; if (!isCat(c)) return;
   const groups: Markers['groups'] = {};
   for (let k = 0; k < c.categories.length; k++) {
-    app.showLoading(`Finding markers: ${c.categories[k]} (${k + 1}/${c.categories.length})`, k / c.categories.length);
+    app.showLoading(`Finding markers: ${c.categories[k]} (${k + 1}/${c.categories.length})`, k / c.categories.length, true);
     const mask = new Uint8Array(c.codes.length); let cnt = 0;
     for (let i = 0; i < mask.length; i++) if (c.codes[i] === k) { mask[i] = 1; cnt++; }
     if (cnt < 3 || cnt > mask.length - 3) { groups[c.categories[k]] = []; continue; }
@@ -408,7 +408,7 @@ function selectionPanel(app: App): Panel {
   body_run(s, () => app.guard(async () => {
     const A = maskFor('a'); if (!A) return app.toast('Select cells first (Box / Lasso tool) or choose a category to test.');
     const B = maskFor('b');
-    res = await app.client.de(app.layerInfo.name, A, B, app.transform, (m, f) => app.showLoading(m, f ?? null));
+    res = await app.client.de(app.layerInfo.name, A, B, app.transform, (m, f) => app.showLoading(m, f ?? null, true));
     app.hideLoading(); renderTable();
   }));
   if (app.remote) {
