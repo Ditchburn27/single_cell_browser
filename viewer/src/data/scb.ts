@@ -44,7 +44,7 @@ export function blobSource(blob: Blob): ByteSource {
 
 interface Ref { offset: number; length: number }
 interface ObsEntry { name: string; kind: 'cat' | 'num' | 'str'; categories?: string[]; colors?: string[]; dtype?: string; codes?: Ref; values?: Ref }
-interface LayerEntry { name: string; nGenes: number; quant: 'u8' | 'f16' | 'f32'; looksLikeCounts: boolean; varNames: Ref; index: Ref }
+interface LayerEntry { name: string; nGenes: number; quant: 'u8' | 'f16' | 'f32'; looksLikeCounts: boolean; varNames: Ref; index: Ref; totals?: Ref }
 interface Header {
   version: number; name: string; n: number; obsNames: Ref; obs: ObsEntry[];
   embeddings: { name: string; dim: number; data: Ref }[]; layers: LayerEntry[]; markers: Markers | null;
@@ -95,7 +95,12 @@ export class ScbSource implements GeneSource {
   }
 }
 
-export interface ScbFile { payload: DatasetPayload; source(layer: string): GeneSource }
+export interface ScbFile {
+  payload: DatasetPayload;
+  source(layer: string): GeneSource;
+  /** Per-cell totals recorded at pack time, or null if this file predates them. */
+  totals(layer: string): Float32Array | null;
+}
 
 export function readScb(src: ByteSource, fileName: string, onProgress?: (m: string, f?: number) => void): ScbFile {
   const p = onProgress ?? (() => {});
@@ -140,6 +145,10 @@ export function readScb(src: ByteSource, fileName: string, onProgress?: (m: stri
       let s = sources.get(layer);
       if (!s) { s = new ScbSource(src, n, entries.get(layer)!); sources.set(layer, s); }
       return s;
+    },
+    totals(layer) {
+      const ref = entries.get(layer)?.totals;
+      return ref ? aligned(section(src, ref), Float32Array) : null;
     },
   };
 }

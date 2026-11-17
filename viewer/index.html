@@ -48,17 +48,17 @@
     </div>
   </header>
   <div id="toolbar">
-    <div class="panel-ctrl"><label>Colour left by</label><select id="obs-sel"></select></div>
-    <div class="panel-ctrl"><label>Right pane</label><select id="obs-sel2"></select></div>
+    <div class="panel-ctrl" title="Annotation used to colour the left plot — cell type, donor, QC metric, anything in obs"><label>Colour left by</label><select id="obs-sel"></select></div>
+    <div class="panel-ctrl" title="What the right plot shows: the gene chosen below, or a second annotation to compare against the left"><label>Right pane</label><select id="obs-sel2"></select></div>
     <div class="panel-ctrl" style="position:relative"><label>Gene</label>
-      <input type="text" id="gene-input" placeholder="Search gene…" autocomplete="off" spellcheck="false">
+      <input type="text" id="gene-input" placeholder="Search gene…" autocomplete="off" spellcheck="false" title="Type a gene name to colour the right plot by its expression. Matching is case-insensitive">
       <div id="gene-suggestions"></div></div>
-    <div class="panel-ctrl"><label>Highlight</label><input type="text" id="highlight-input" placeholder="Group or value…" style="min-width:110px"></div>
-    <div class="panel-ctrl"><label>Layer</label><select id="layer-sel"></select>
-      <select id="transform-sel" title="Transform applied on the fly"><option value="none">as stored</option><option value="log1p-cp10k">log1p CP10k</option></select></div>
-    <div class="panel-ctrl"><label>Colours</label><select id="cmap-sel"></select>
-      <label class="chk"><input type="checkbox" id="clip-chk" checked> clip top 0.5%</label>
-      <label class="chk" id="img-lbl" style="display:none"><input type="checkbox" id="img-chk" checked> tissue image</label></div>
+    <div class="panel-ctrl" title="Type a group name to grey out every other cell, keeping it in place for context"><label>Highlight</label><input type="text" id="highlight-input" placeholder="Group or value…" style="min-width:110px"></div>
+    <div class="panel-ctrl"><label title="Which expression matrix to read: X, raw, or a named layer from the file">Layer</label><select id="layer-sel" title="Which expression matrix to read: X, raw, or a named layer from the file"></select>
+      <select id="transform-sel" title="How stored values are scaled before plotting. Use &quot;as stored&quot; for data that is already normalised; log1p CP10k is for raw counts and needs per-cell totals"><option value="none">as stored</option><option value="log1p-cp10k">log1p CP10k</option></select></div>
+    <div class="panel-ctrl"><label>Colours</label><select id="cmap-sel" title="Colour map for continuous values such as gene expression"></select>
+      <label class="chk" title="Cap the colour scale at the 99.5th percentile so a few extreme cells do not flatten the rest"><input type="checkbox" id="clip-chk" checked> clip top 0.5%</label>
+      <label class="chk" id="img-lbl" style="display:none" title="Draw the tissue image behind the spots (spatial datasets only)"><input type="checkbox" id="img-chk" checked> tissue image</label></div>
     <div class="panel-ctrl tools" style="flex:0 0 auto">
       <span class="toolgrp" id="toolgrp">
         <button class="hbtn on" data-tool="pan" title="Drag to pan, scroll to zoom. Shift-drag selects. Click again to turn off and clear the selection">Pan</button>

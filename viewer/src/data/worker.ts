@@ -12,6 +12,7 @@ let file: any = null;
 let read: ReadResult | null = null;
 let payload: DatasetPayload | null = null;
 let scb: ScbFile | null = null;
+let remote = false;   // opened from a URL: never fall back to scanning the whole matrix
 const sources = new Map<string, GeneSource>();
 const totalsCache = new Map<string, Float32Array>();
 
@@ -34,6 +35,7 @@ export type OpenInput = File | { url: string };
 async function openFile(id: number, input: OpenInput) {
   if (file) { try { file.close(); } catch { /* ignore */ } file = null; }
   sources.clear(); totalsCache.clear(); scb = null; read = null;
+  remote = !(input instanceof File);
   if (!(input instanceof File)) {
     // Served over HTTP: only .scb, whose layout is designed for range reads. A raw .h5ad is
     // mounted through WORKERFS and needs a real File.
@@ -81,12 +83,16 @@ function computer(id: number, layer: string, transform: Transform): Computer {
   const src = sourceFor(id, layer);
   let totals: Float32Array | null = null;
   if (transform !== 'none') {
-    totals = totalsCache.get(layer) ?? null;
+    totals = totalsCache.get(layer) ?? scb?.totals(layer) ?? null;
     if (!totals) {
+      // Totals need every gene. On a local file that is a pass over memory; over HTTP it is
+      // one request per gene, so refuse rather than firing thousands of them.
+      if (remote)
+        throw new Error('This transform needs per-cell totals, which this dataset does not carry. Repack it with a current scbpack, or open the file locally.');
       progress(id)('Computing per-cell totals…', 0);
       totals = computeTotals(src, (f) => progress(id)('Computing per-cell totals…', f));
-      totalsCache.set(layer, totals);
     }
+    totalsCache.set(layer, totals);
   }
   return { src, totals, transform };
 }

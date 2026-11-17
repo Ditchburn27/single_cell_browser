@@ -60,6 +60,11 @@ This matters for a dataset served over HTTP: *Compute markers* reads every gene 
 one request per gene per group, so the viewer offers it only for a locally opened file and uses the
 stored markers otherwise.
 
+Every packed layer also carries per-cell totals, summed during packing. The viewer needs them for the
+log1p-CP10k transform and would otherwise have to read the whole matrix to get them - again one request
+per gene when the file is served over HTTP. A `.scb` written by an older version has none, and the viewer
+then declines the transform for a hosted dataset rather than issuing those requests.
+
 Colours come from `uns['<col>_colors_dict']` (keyed by category name, preferred) or `uns['<col>_colors']`
 (positional). For a palette stored under some other key, name it:
 

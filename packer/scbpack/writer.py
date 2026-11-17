@@ -512,6 +512,10 @@ def pack(path, out_path, layers=("X",), embeddings=None, genes="all", max_cells=
                 if accum is not None:
                     accum.add(M.indices[a_:b_], M.data[a_:b_])
 
+        # Per-cell totals for the log1p-CP10k transform. Summed here while the matrix is
+        # already in hand: the viewer would otherwise have to read every gene to get them,
+        # which is one HTTP request per gene for a dataset served over the network.
+        tot = np.zeros(n, dtype=np.float64)
         _log("  pass 2: writing gene blocks…")
         if fmt == "csc":
             written = 0
@@ -519,6 +523,7 @@ def pack(path, out_path, layers=("X",), embeddings=None, genes="all", max_cells=
                 cols_ = gidx[a0:a0 + 2000]
                 M = _col_select(X, cols_)[cells].tocsc() if len(cells) != n_all else _col_select(X, cols_).tocsc()
                 M.sort_indices()
+                tot += np.asarray(M.sum(axis=1)).ravel()
                 write_csc(M, written)
                 written += M.shape[1]
                 _log("    %d / %d genes" % (written, len(gidx)))
@@ -529,6 +534,7 @@ def pack(path, out_path, layers=("X",), embeddings=None, genes="all", max_cells=
                 if len(parts) % 5 == 1:
                     _log("    %d / %d cells" % (done, n))
             M = sp.vstack(parts, format="csc"); M.sort_indices()
+            tot += np.asarray(M.sum(axis=1)).ravel()
             write_csc(M, 0)
         offsets[len(gidx)] = out.pos
         kept_names = [var_names[i] for i in gidx]
@@ -538,6 +544,7 @@ def pack(path, out_path, layers=("X",), embeddings=None, genes="all", max_cells=
             "name": spec, "nGenes": int(len(gidx)), "quant": q, "looksLikeCounts": bool(counts_like),
             "varNames": out.add_json(kept_names),
             "index": out.add(offsets.tobytes()),
+            "totals": out.add(tot.astype("<f4").tobytes()),
         })
         _log("  layer %s written (%.1f MB)" % (spec, (out.pos - pos0) / 1e6))
     header["layers"] = layer_entries
