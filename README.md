@@ -83,7 +83,7 @@ scbpack apply-annotations my_dataset_annotations.json original.h5ad -o annotated
 cd viewer
 npm install
 npm run dev          # http://localhost:5173
-npm test             # vitest: reader, CSR→CSC, .scb cross-language round trip, DE vs scipy, dev-server ranges
+npm test             # vitest: reader, CSR→CSC, .scb cross-language round trip, DE vs scipy, dev-server ranges, tooltips
 npm run build        # → dist/ (static; the h5wasm worker is ~4.8 MB)
 ```
 

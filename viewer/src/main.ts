@@ -1,5 +1,6 @@
 import './style.css';
 import { App } from './app';
+import { initTooltips } from './ui/tooltip';
 
 const app = new App();
 (window as unknown as { app: App }).app = app; // handy for debugging in the console
@@ -26,6 +27,9 @@ window.addEventListener('drop', (e) => {
   e.preventDefault(); depth = 0; veil.hidden = true;
   const f = e.dataTransfer?.files?.[0]; if (f) app.open(f);
 });
+
+// instant themed tooltips for every control carrying a title
+initTooltips();
 
 // help overlay — reachable from the welcome card and from the header while a dataset is open
 const help = document.getElementById('help')!;
