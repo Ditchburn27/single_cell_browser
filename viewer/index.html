@@ -129,7 +129,9 @@
     <dl>
       <dt>Selection &amp; differential expression</dt><dd>One-vs-rest or group-vs-group tests &mdash; selected cells
         or any annotation group, against the rest or another group. Ranked table plus a volcano plot, with all
-        genes downloadable as CSV. Selections can be exported as cell IDs or saved as a new annotation column.</dd>
+        genes downloadable as CSV. Selections can be exported as cell IDs or saved as a new annotation column.
+        Running a test reads every gene, so it is offered for files you open yourself; on a dataset served over
+        the network the rest of the panel still works and the test is disabled.</dd>
       <dt>Composition</dt><dd>Stacked bars of one annotation within another, as proportions or counts.</dd>
       <dt>Dot plot / Heatmap</dt><dd>Top markers per group or your own gene list. Many datasets already carry
         marker genes, computed when the file was packed. <i>Compute markers</i> recomputes them in the browser
@@ -156,9 +158,11 @@
         keeping the strongest few. Precomputed markers stored in the file use this same definition, so they
         match what <i>Compute markers</i> would produce.</dd>
     </dl>
-    <p class="help-note">Marker finding reads every gene in the matrix, once per group. On a file opened from your
-      own disk that is quick. For a dataset served over the network it would mean one request per gene per group,
-      so <i>Compute markers</i> is offered only for local files and precomputed markers are used instead.</p>
+    <p class="help-note">Anything that ranks <i>all</i> genes &mdash; differential expression, marker finding &mdash;
+      has to read the entire matrix. On a file opened from your own disk that is a quick pass over memory. For a
+      dataset served over the network it would mean one request per gene, so those operations are offered only for
+      local files; hosted datasets use the markers computed when they were packed. Everything driven by a gene you
+      name &mdash; plots, violins, dot plots, gene set scores &mdash; reads only those genes and works either way.</p>
 
     <h3>Getting things out</h3>
     <dl>

@@ -411,6 +411,19 @@ function selectionPanel(app: App): Panel {
     res = await app.client.de(app.layerInfo.name, A, B, app.transform, (m, f) => app.showLoading(m, f ?? null));
     app.hideLoading(); renderTable();
   }));
+  if (app.remote) {
+    // Every gene gets tested, which over HTTP is one request per gene. Keep the panel visible
+    // — selections, cell-ID export and annotations all still work — but disable the test.
+    const runBtn = s.body.querySelector<HTMLButtonElement>('[data-act=run]')!;
+    runBtn.disabled = true;
+    runBtn.style.background = runBtn.style.color = runBtn.style.borderColor = '';
+    runBtn.title = 'Differential expression reads every gene in the matrix. That is quick on a file opened from your own disk, but a request per gene for a dataset served over the network.';
+    const note = document.createElement('span');
+    note.className = 'pill';
+    note.textContent = 'local files only';
+    note.title = runBtn.title;
+    runBtn.after(note);
+  }
   q('vol').style.display = 'block';
   s.q('[data-act=csv]');
   (s.body.querySelector('[data-act=csv]') as HTMLElement).onclick = () => {

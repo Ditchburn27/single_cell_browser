@@ -123,6 +123,11 @@ self.onmessage = async (ev: MessageEvent) => {
         break;
       }
       case 'de': {
+        // Differential expression tests every gene in the matrix. Reading the whole matrix is
+        // a pass over memory for a local file, but one HTTP request per gene for a hosted one,
+        // so it is refused here rather than in any single caller.
+        if (remote)
+          throw new Error('Differential expression reads every gene in the matrix, which is not practical for a dataset served over the network. Open the .h5ad or .scb locally to run it.');
         const r = de(computer(id, m.layer, m.transform), m.maskA, m.maskB ?? null, (f) => progress(id)('Testing genes…', f));
         const tr = Object.values(r).filter((x) => ArrayBuffer.isView(x)).map((x) => (x as ArrayBufferView).buffer as ArrayBuffer);
         post({ id, type: 'result', result: r }, tr);

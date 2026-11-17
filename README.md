@@ -156,6 +156,21 @@ Two things worth knowing:
 For scale: a 154,748 x 28,267 dataset packs to 661 MB, of which opening it reads 8.59 MB and each gene a further
 8-110 KB.
 
+### What a hosted dataset will not do
+
+Reading a `.scb` over HTTP costs one request per gene, so anything that has to walk the *whole* gene axis is
+refused when the dataset was opened from a URL, and offered as normal for a file the user opens themselves:
+
+| operation | genes read | hosted |
+| --- | --- | --- |
+| differential expression (`de`) | all | refused in `worker.ts`; the panel's other actions still work |
+| marker finding (`de` per group) | all x groups | replaced by the markers stored at pack time |
+| per-cell totals for log1p-CP10k | all | read from the file; refused if it carries none |
+| gene view, violin, gene vs gene, dot plot, heatmap, gene set score | only the genes named | works |
+
+The guard lives in the worker's `de` case rather than in each button, so a new caller cannot route around it.
+If you add an operation that scans every gene, guard it there too.
+
 ## Architecture
 
 ```
