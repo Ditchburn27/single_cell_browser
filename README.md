@@ -8,12 +8,23 @@ only allows requests to itself).
 
 1. Open the site, **drop an `.h5ad`** (or a packed `.scb`) on the page - or open a hosted one directly with
    `?data=<url>` (see [Hosting a `.scb`](#hosting-a-scb)).
-2. Explore: two linked embeddings (colour by annotation / gene / gene-set score), legend with counts and per-group marker
-   genes, hover tooltips, box/lasso selection, differential expression, dot plot, heatmap, violin, composition, counts,
-   gene-vs-gene, notes, PNG/SVG export, save/load the view.
+2. Explore: two linked embeddings (colour by annotation / gene / gene-set score), a legend with counts and per-group
+   marker genes, hover tooltips, box/lasso selection, differential expression, dot plot, heatmap, violin, composition,
+   counts, gene-vs-gene, notes, PNG/SVG export, save/load the view.
 
-**? Help** in the header (or the `?` key) describes every control. On a touch device, drag to pan, pinch to zoom,
-double-tap to reset and tap a point to inspect it.
+**? Help** in the header (or the `?` key) describes every control, and every button has a hover tooltip. Things worth knowing:
+
+- **Selection tools toggle.** Click the lit tool (Pan / Box / Lasso) again to turn it off: the plot still pans, the
+  selection is cleared, and you are back to the whole dataset. Shortcuts: `p`, `b`, `l`; shift-drag selects with any tool,
+  ⌘/Ctrl-drag adds, Alt-drag removes, `Esc` clears.
+- **Legend.** Click a label to hide it, double-click to show only that group, click a swatch to recolour it. Hiding the
+  last visible group (or double-clicking the group already on its own) restores every group, so the full dataset is always
+  one click away.
+- **Cancel.** Long operations (opening a big file, differential expression, computing markers) show a **Cancel** button.
+  It stops the worker outright and then reopens the dataset, which resets the view and closes the panels.
+- **Failed opens say so.** If a file fails to open while another dataset is on screen, the message states that nothing
+  was loaded and which dataset you are still viewing.
+- **Touch.** Drag to pan, pinch to zoom, double-tap to reset, tap a point to inspect it (stands in for hover).
 
 What your file needs: an embedding in `obsm` (e.g. `X_umap`, `X_tsne`, `spatial`, or any 2+ column array/dataframe),
 annotations in `obs`, an expression matrix (`X`, `raw/X` or `layers/*`; CSR, CSC or dense; gzip is fine).
@@ -94,23 +105,53 @@ scbpack apply-annotations my_dataset_annotations.json original.h5ad -o annotated
 
 ## Develop
 
+Needs **Node 22.14 or newer** (Vite 8 and jsdom 31 require it; `viewer/.node-version`, `.nvmrc` and the `engines` field pin it,
+and Cloudflare's build reads the same file).
+
 ```bash
 cd viewer
 npm install
 npm run dev          # http://localhost:5173
-npm test             # vitest: reader, CSR→CSC, .scb cross-language round trip, DE vs scipy, dev-server ranges, tooltips
-npm run build        # → dist/ (static; the h5wasm worker is ~4.8 MB)
+npm test             # vitest, see below
+npm run build        # tsc + vite build → dist/ (static; the h5wasm worker is ~4.8 MB)
 ```
+
+What the tests cover: the h5ad reader and CSR→CSC; the `.scb` round trip between the Python packer and the TypeScript
+reader; differential expression against scipy; the HTTP Range source (`http-source`) and the dev server's `HEAD`/`Range`
+handling (`serve-dist`); cancel terminating the worker (`client-cancel`); the legend's hide/isolate rules (`legend`); and
+tooltips (`tooltip`, run in jsdom).
 
 Test fixtures are generated from any viewer HTML of the old format / synthetic data:
 `python3 tests/make_fixture.py <old_viewer.html> tests/fixtures`, `python3 tests/make_spatial_fixture.py tests/fixtures/spatial_synth.h5ad`,
 `python3 tests/make_de_reference.py tests/fixtures/golden_small.h5ad tests/fixtures/de_ref.json`; then `scbpack` them to `.scb`.
-Python tests: `python3 tests/test_scbpack.py`. Opt-in smoke test over your own files:
-`FILES=a.h5ad,b.h5ad npx vitest run tests/real-files.test.ts`.
+Tests that need a fixture skip themselves when it is missing, so a fresh checkout runs a subset.
+
+Python tests: `python3 tests/test_scbpack.py`.
+
+Opt-in checks against your own files:
+
+```bash
+FILES=a.h5ad,b.h5ad npx vitest run tests/real-files.test.ts                      # reader smoke test on raw .h5ad files
+SCB=big.scb REF=ref.json npx vitest run tests/real-scb.test.ts tests/http-source.test.ts   # packed file vs a reference dump
+```
 
 ## Deploy to Cloudflare
 
 Deployed as Workers static assets (Cloudflare's current path for static sites; `viewer/wrangler.toml`).
+
+**Automatic.** The site is connected to this repo through Cloudflare **Workers Builds**, so a push to `main` builds and
+deploys it, and other branches get preview builds. The build settings are:
+
+| setting | value |
+| --- | --- |
+| Root directory | `viewer` |
+| Build command | `npm ci && npm run build` |
+| Deploy command | `npx wrangler deploy` |
+
+Node comes from `viewer/.node-version`. Do not set `NODE_ENV=production` in the build variables: the build needs the dev
+dependencies (`vite`, `typescript`). If a build fails, its log is under the Worker's **Builds** tab in the dashboard.
+
+**Manual**, from your machine:
 
 ```bash
 cd viewer
@@ -184,10 +225,12 @@ If you add an operation that scans every gene, guard it there too.
 ## Architecture
 
 ```
-viewer/src/data     schema, h5ad reader (h5wasm in a worker, WORKERFS = no whole-file read), CSR→CSC, .scb reader, DE/stats
+viewer/src/data     schema, h5ad reader (h5wasm in a worker, WORKERFS = no whole-file read), CSR→CSC, .scb reader
+                    (local file or HTTP Range), DE/stats; the worker is terminated to cancel (client.ts)
 viewer/src/render   WebGL2 scatter (1M points @ 140 fps), colour maps, hover grid, lasso hit-testing
 viewer/src/panels   charts written once against a Draw API with canvas + SVG backends (every plot exports as SVG)
-viewer/src/ui       panes (legend, labels, interaction), dock panels (selection/DE, dot, heatmap, …)
+viewer/src/ui       panes (legend, labels, interaction), dock panels (selection/DE, dot, heatmap, …), themed tooltips
+viewer/src/state    default view heuristics (`defaults.ts`), legend hide/isolate rules (`legend.ts`)
 viewer/src/plugins  optional, data-gated side panels (Allen mouse-brain ISH, shown only for mouse-like gene symbols)
 viewer/worker       Cloudflare Worker serving .scb from R2 by HTTP Range at /data/<key>
 packer/scbpack      Python packer + annotation merge
