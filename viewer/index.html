@@ -14,7 +14,7 @@
     <p class="sub">Explore a single-cell dataset right in your browser.<br>Your file is read locally &mdash; nothing is uploaded.</p>
     <label class="bigbtn" for="file-input">Choose an .h5ad file</label>
     <input type="file" id="file-input" accept=".h5ad,.scb" hidden>
-    <p class="hint">or drop it anywhere on this page</p>
+    <p class="hint">or drop it anywhere on this page &middot; <a href="#" id="help-link">what can it do?</a></p>
     <div id="welcome-error" class="err" hidden></div>
     <details class="tips">
       <summary>What does my file need?</summary>
@@ -38,45 +38,46 @@
       <div class="slider-wrap"><label>Point size</label><input type="range" id="ptsz" min="0.5" max="14" step="0.5" value="3"><span id="ptval">3</span></div>
       <div class="slider-wrap"><label>Label size</label><input type="range" id="lblsz" min="8" max="28" step="1" value="12"><span id="lblszval">12</span></div>
       <button class="hbtn" id="rbtn" title="Reset view (or double-click a plot)">Reset view</button>
-      <button class="hbtn on" id="syncbtn">Sync zoom: on</button>
+      <button class="hbtn on" id="syncbtn" title="Pan and zoom both panes together. Turn off to move them independently">Sync zoom: on</button>
       <button class="hbtn" id="zbtn" title="Draw order">Z: random</button>
-      <button class="hbtn on" id="lblbtn">Labels: on</button>
+      <button class="hbtn on" id="lblbtn" title="Show the category name on each group of cells">Labels: on</button>
       <button class="hbtn" id="savebtn" title="Save the current view (colours, gene, zoom…) as a small JSON file">Save view</button>
-      <button class="hbtn" id="loadbtn">Load view</button>
-      <button class="hbtn" id="openbtn">Open file…</button>
+      <button class="hbtn" id="loadbtn" title="Restore a view from a JSON file saved with Save view">Load view</button>
+      <button class="hbtn" id="openbtn" title="Open another .h5ad or .scb (or drop one on the page)">Open file…</button>
+      <button class="hbtn" id="helpbtn" title="What everything does (?)">? Help</button>
     </div>
   </header>
   <div id="toolbar">
-    <div class="panel-ctrl"><label>Colour left by</label><select id="obs-sel"></select></div>
-    <div class="panel-ctrl"><label>Right pane</label><select id="obs-sel2"></select></div>
+    <div class="panel-ctrl" title="Annotation used to colour the left plot — cell type, donor, QC metric, anything in obs"><label>Colour left by</label><select id="obs-sel"></select></div>
+    <div class="panel-ctrl" title="What the right plot shows: the gene chosen below, or a second annotation to compare against the left"><label>Right pane</label><select id="obs-sel2"></select></div>
     <div class="panel-ctrl" style="position:relative"><label>Gene</label>
-      <input type="text" id="gene-input" placeholder="Search gene…" autocomplete="off" spellcheck="false">
+      <input type="text" id="gene-input" placeholder="Search gene…" autocomplete="off" spellcheck="false" title="Type a gene name to colour the right plot by its expression. Matching is case-insensitive">
       <div id="gene-suggestions"></div></div>
-    <div class="panel-ctrl"><label>Highlight</label><input type="text" id="highlight-input" placeholder="Group or value…" style="min-width:110px"></div>
-    <div class="panel-ctrl"><label>Layer</label><select id="layer-sel"></select>
-      <select id="transform-sel" title="Transform applied on the fly"><option value="none">as stored</option><option value="log1p-cp10k">log1p CP10k</option></select></div>
-    <div class="panel-ctrl"><label>Colours</label><select id="cmap-sel"></select>
-      <label class="chk"><input type="checkbox" id="clip-chk" checked> clip top 0.5%</label>
-      <label class="chk" id="img-lbl" style="display:none"><input type="checkbox" id="img-chk" checked> tissue image</label></div>
+    <div class="panel-ctrl" title="Type a group name to grey out every other cell, keeping it in place for context"><label>Highlight</label><input type="text" id="highlight-input" placeholder="Group or value…" style="min-width:110px"></div>
+    <div class="panel-ctrl"><label title="Which expression matrix to read: X, raw, or a named layer from the file">Layer</label><select id="layer-sel" title="Which expression matrix to read: X, raw, or a named layer from the file"></select>
+      <select id="transform-sel" title="How stored values are scaled before plotting. Use &quot;as stored&quot; for data that is already normalised; log1p CP10k is for raw counts and needs per-cell totals"><option value="none">as stored</option><option value="log1p-cp10k">log1p CP10k</option></select></div>
+    <div class="panel-ctrl"><label>Colours</label><select id="cmap-sel" title="Colour map for continuous values such as gene expression"></select>
+      <label class="chk" title="Cap the colour scale at the 99.5th percentile so a few extreme cells do not flatten the rest"><input type="checkbox" id="clip-chk" checked> clip top 0.5%</label>
+      <label class="chk" id="img-lbl" style="display:none" title="Draw the tissue image behind the spots (spatial datasets only)"><input type="checkbox" id="img-chk" checked> tissue image</label></div>
     <div class="panel-ctrl tools" style="flex:0 0 auto">
       <span class="toolgrp" id="toolgrp">
-        <button class="hbtn on" data-tool="pan" title="Pan / zoom (shift-drag to select)">Pan</button>
-        <button class="hbtn" data-tool="box" title="Box select">Box</button>
-        <button class="hbtn" data-tool="lasso" title="Lasso select">Lasso</button>
+        <button class="hbtn on" data-tool="pan" title="Drag to pan, scroll to zoom. Shift-drag selects. Click again to turn off and clear the selection">Pan</button>
+        <button class="hbtn" data-tool="box" title="Drag a rectangle to select cells. Click again to turn off and clear the selection">Box</button>
+        <button class="hbtn" data-tool="lasso" title="Draw a freehand loop to select cells. Click again to turn off and clear the selection">Lasso</button>
       </span>
-      <button class="hbtn" id="dl-left">⬇ Left</button><button class="hbtn" id="dl-right">⬇ Right</button>
+      <button class="hbtn" id="dl-left" title="Download the left pane as an image">⬇ Left</button><button class="hbtn" id="dl-right" title="Download the right pane as an image">⬇ Right</button>
     </div>
   </div>
   <div id="docknav">
-    <button class="hbtn" data-panel="selection">Selection / DE</button>
-    <button class="hbtn" data-panel="crosstab">Composition</button>
-    <button class="hbtn" data-panel="dot">Dot plot</button>
-    <button class="hbtn" data-panel="heat">Heatmap</button>
-    <button class="hbtn" data-panel="violin">Violin</button>
-    <button class="hbtn" data-panel="count">Counts</button>
-    <button class="hbtn" data-panel="g2g">Gene vs gene</button>
-    <button class="hbtn" data-panel="gset">Gene set</button>
-    <button class="hbtn" data-panel="notes">Notes</button>
+    <button class="hbtn" data-panel="selection" title="Differential expression: selected cells or any group, against the rest or another group. Ranked table, volcano plot, CSV export">Selection / DE</button>
+    <button class="hbtn" data-panel="crosstab" title="Stacked bars of one annotation within another, as proportions or counts">Composition</button>
+    <button class="hbtn" data-panel="dot" title="Dot plot: mean expression and % of cells detected, per group, for marker genes or your own list">Dot plot</button>
+    <button class="hbtn" data-panel="heat" title="Heatmap of mean expression per group, for marker genes or your own list">Heatmap</button>
+    <button class="hbtn" data-panel="violin" title="Distribution of a gene or any numeric column, split by an annotation">Violin</button>
+    <button class="hbtn" data-panel="count" title="Bar chart of how many cells are in each group">Counts</button>
+    <button class="hbtn" data-panel="g2g" title="Scatter of two genes against each other with a correlation, coloured by the left pane">Gene vs gene</button>
+    <button class="hbtn" data-panel="gset" title="Score cells by the mean expression of a gene list and show it in the right pane">Gene set</button>
+    <button class="hbtn" data-panel="notes" title="Free text per group, for annotating as you go. Exportable">Notes</button>
     <span id="plugin-nav"></span>
   </div>
   <div id="marker-pop"><span class="mk-close" id="mk-close">✕</span><h4 id="mk-title"></h4><div id="mk-list"></div></div>
@@ -85,8 +86,99 @@
     <div id="dock"></div>
   </div>
 </div>
+<div id="help" hidden>
+  <div class="help-card" role="dialog" aria-modal="true" aria-labelledby="help-h">
+    <button class="help-x" id="help-close" title="Close (Esc)">&#10005;</button>
+    <h2 id="help-h">What everything does</h2>
+    <p class="help-lead">Two linked embeddings side by side. The <b>left</b> pane is coloured by an annotation,
+      the <b>right</b> by a gene (or a second annotation). Everything is computed in your browser.</p>
+
+    <h3>Choosing what to look at</h3>
+    <dl>
+      <dt>Colour left by</dt><dd>Annotation shown in the left pane &mdash; cell types, clusters, sample, any <code>obs</code> column.</dd>
+      <dt>Right pane</dt><dd>Switch the right pane between the selected gene and a second annotation.</dd>
+      <dt>Gene</dt><dd>Type to search; the right pane recolours. Expression comes from the current layer.</dd>
+      <dt>Highlight</dt><dd>Type a group name or value to dim everything else.</dd>
+      <dt>Layer</dt><dd>Pick <code>X</code>, <code>raw</code> or any stored layer. The second menu can apply a
+        log1p&nbsp;CP10k transform on the fly when the layer holds raw counts.</dd>
+      <dt>Colours</dt><dd>Colormap, an optional clip of the top 0.5% (stops one bright cell flattening the scale),
+        and the tissue image toggle for spatial data.</dd>
+    </dl>
+
+    <h3>Moving around</h3>
+    <dl>
+      <dt>Pan / Box / Lasso</dt><dd>Drag to pan and scroll to zoom, or draw a box or freehand loop to select cells.
+        Clicking the active tool turns it off: with none of the three lit the plot still pans, the selection is
+        cleared and you are back to the whole dataset. Shortcuts: <kbd>p</kbd> pan, <kbd>b</kbd> box,
+        <kbd>l</kbd> lasso.</dd>
+      <dt>Selecting</dt><dd>Shift-drag selects with any tool. <kbd>&#8984;</kbd>/<kbd>Ctrl</kbd>-drag adds to the
+        selection, <kbd>Alt</kbd>-drag removes, <kbd>Esc</kbd> clears.</dd>
+      <dt>Touch</dt><dd>Drag with one finger to pan, pinch with two to zoom, double-tap to reset.
+        A single tap inspects the nearest cell, standing in for the hover tooltip. Box and lasso
+        selection work by dragging once the matching tool is active.</dd>
+      <dt>Sync zoom</dt><dd>Keeps both panes on the same view. Double-click a plot, or press Reset view, to zoom back out.</dd>
+      <dt>Z / Labels / Point size</dt><dd>Draw order for overplotted points, on-plot group labels, and point and label sizing.</dd>
+      <dt>Legend</dt><dd>Shows cell counts per group. Click a label to hide or show it, double-click to show only
+        that group, click the swatch to change its colour. Clicking the last group still visible &mdash; or
+        double-clicking the one already on its own &mdash; brings every group back, so you can always get to the
+        full dataset. A <b>&#9656;</b> marks groups with marker genes &mdash; click it for the top ones.</dd>
+      <dt>Hover</dt><dd>Point tooltips give the cell's annotations and the current gene's value.</dd>
+    </dl>
+
+    <h3>Panels</h3>
+    <dl>
+      <dt>Selection &amp; differential expression</dt><dd>One-vs-rest or group-vs-group tests &mdash; selected cells
+        or any annotation group, against the rest or another group. Ranked table plus a volcano plot, with all
+        genes downloadable as CSV. Selections can be exported as cell IDs or saved as a new annotation column.
+        Running a test reads every gene, so it is offered for files you open yourself; on a dataset served over
+        the network the rest of the panel still works and the test is disabled.</dd>
+      <dt>Composition</dt><dd>Stacked bars of one annotation within another, as proportions or counts.</dd>
+      <dt>Dot plot / Heatmap</dt><dd>Top markers per group or your own gene list. Many datasets already carry
+        marker genes, computed when the file was packed. <i>Compute markers</i> recomputes them in the browser
+        for any annotation &mdash; available when you open a local file.</dd>
+      <dt>Violin</dt><dd>Gene expression or any numeric column, split by an annotation.</dd>
+      <dt>Cell counts</dt><dd>Bar chart of cells per group, sorted by count or name.</dd>
+      <dt>Gene vs gene</dt><dd>Scatter of two genes with a correlation, points coloured by the left pane.</dd>
+      <dt>Gene set score</dt><dd>Mean expression of a list of genes, shown in the right pane.</dd>
+      <dt>Group notes</dt><dd>Free text per group &mdash; useful while annotating. Exportable.</dd>
+    </dl>
+
+    <h3>How the statistics work</h3>
+    <dl>
+      <dt>Differential expression</dt><dd>A <b>Wilcoxon rank-sum test</b> of group A against group B, or against
+        every other cell when no second group is given. Non-detected cells are kept rather than filtered, and
+        all share the lowest ranks; the variance is tie-corrected. The p-value is two-sided from the normal
+        approximation and is adjusted across genes by the Benjamini&ndash;Hochberg procedure. A Welch
+        <i>t</i> statistic is reported beside it for reference.</dd>
+      <dt>Log fold change</dt><dd>log<sub>2</sub> of the ratio of group means taken on the <b>de-logged</b> scale
+        (<code>expm1</code>), with a small floor added to each mean so that genes absent from one group stay
+        finite. Computed from the values as currently transformed.</dd>
+      <dt>% detected</dt><dd>Fraction of cells in the group with a non-zero value for that gene.</dd>
+      <dt>Top markers</dt><dd>Per group, genes with a positive log fold change ranked by the Wilcoxon statistic,
+        keeping the strongest few. Precomputed markers stored in the file use this same definition, so they
+        match what <i>Compute markers</i> would produce.</dd>
+    </dl>
+    <p class="help-note">Anything that ranks <i>all</i> genes &mdash; differential expression, marker finding &mdash;
+      has to read the entire matrix. On a file opened from your own disk that is a quick pass over memory. For a
+      dataset served over the network it would mean one request per gene, so those operations are offered only for
+      local files; hosted datasets use the markers computed when they were packed. Everything driven by a gene you
+      name &mdash; plots, violins, dot plots, gene set scores &mdash; reads only those genes and works either way.</p>
+
+    <h3>Getting things out</h3>
+    <dl>
+      <dt>&#11015; Left / &#11015; Right</dt><dd>Download either embedding. Every panel chart also exports as SVG.</dd>
+      <dt>Save view / Load view</dt><dd>Writes a small JSON file with the colours, gene, zoom and panel state so you
+        can return to exactly this view, or send it to someone with the same dataset.</dd>
+      <dt>Export annotations</dt><dd>Annotations you create from selections come out as JSON. Merge them back into
+        the original file with <code>scbpack apply-annotations</code>.</dd>
+    </dl>
+
+    <p class="help-foot">Nothing you open is uploaded &mdash; a file you choose is read locally in your
+      browser, and a hosted dataset is streamed read-only from its server.</p>
+  </div>
+</div>
 <div id="tooltip"></div>
-<div id="loading" hidden><div class="lbox"><div id="load-msg">Loading…</div><div class="bar"><div id="load-bar"></div></div></div></div>
+<div id="loading" hidden><div class="lbox"><div id="load-msg">Loading…</div><div class="bar"><div id="load-bar"></div></div><button class="hbtn" id="load-cancel" hidden title="Stop this operation and reload the dataset">Cancel</button></div></div>
 <div id="dropveil" hidden>Drop an .h5ad or .scb file to open</div>
 <script type="module" src="/src/main.ts"></script>
 </body>

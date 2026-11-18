@@ -206,7 +206,7 @@ function dotPanel(app: App, kind: 'dot' | 'heat'): Panel {
       let names: string[], idx: number[];
       if (src.value === 'markers') { const r = app.resolveGenes(topMarkerGenes(app, +nIn.value || 3)); names = r.names; idx = r.idx; }
       else { const r = app.resolveGenes(custom.value.split(/[\s,;]+/)); names = r.names; idx = r.idx; }
-      if (!idx.length) { cv.width = cv.height = 0; cv.style.width = cv.style.height = '0'; s.body.dataset.msg = ''; hint(s.body, src.value === 'markers' && !app.markers ? 'No marker genes found in this file. Use “Compute markers” or switch to a custom gene list.' : 'Enter gene names above.'); return; }
+      if (!idx.length) { cv.width = cv.height = 0; cv.style.width = cv.style.height = '0'; s.body.dataset.msg = ''; hint(s.body, src.value === 'markers' && !app.markers ? (app.remote ? 'This dataset has no precomputed marker genes. Switch to a custom gene list, or open the .h5ad locally to compute them.' : 'No marker genes found in this file. Use “Compute markers” or switch to a custom gene list.') : 'Enter gene names above.'); return; }
       hint(s.body, '');
       const my = ++seq;
       const st = await app.client.groupStats(app.layerInfo.name, idx, c.codes, c.categories.length, app.transform);
@@ -222,7 +222,22 @@ function dotPanel(app: App, kind: 'dot' | 'heat'): Panel {
   grp.onchange = src.onchange = nIn.onchange = custom.oninput = () => p.refresh();
   if (scale) scale.onchange = () => p.refresh();
   s.q('[data-act=svg]').onclick = () => chart && exportSvg(chart, `${kind}plot_${grp.value}.svg`);
-  s.q('[data-act=compute]').onclick = () => app.guard(async () => { await computeMarkers(app, grp.value); src.value = 'markers'; p.refresh(); });
+  const computeBtn = s.q<HTMLButtonElement>('[data-act=compute]');
+  if (app.remote) {
+    // Marker finding reads every gene once per group; over HTTP that is one request per gene
+    // per group, so it is offered only for a locally opened file. Hosted datasets instead
+    // carry markers computed at pack time (scbpack --markers), so say so rather than
+    // showing a control that cannot be used.
+    const note = document.createElement('span');
+    note.className = 'pill';
+    note.textContent = app.markers ? 'markers precomputed' : 'no stored markers';
+    note.title = app.markers
+      ? `Marker genes were computed when this dataset was packed${app.markers.groupby ? ` (grouped by \u201c${app.markers.groupby}\u201d)` : ''}, so nothing is computed here. To rank markers for a different annotation, open the .h5ad locally.`
+      : 'This dataset was published without precomputed marker genes. Enter a custom gene list, or open the .h5ad locally to compute markers.';
+    computeBtn.replaceWith(note);
+  } else {
+    computeBtn.onclick = () => app.guard(async () => { await computeMarkers(app, grp.value); src.value = 'markers'; p.refresh(); });
+  }
   s.el.addEventListener('resized', () => p.refresh());
   fill(grp, catKeys(app), app.markers?.groupby ?? app.leftObs);
   return p;
@@ -238,7 +253,7 @@ export async function computeMarkers(app: App, key: string, topN = 30) {
   const c = app.ds.obs[key]; if (!isCat(c)) return;
   const groups: Markers['groups'] = {};
   for (let k = 0; k < c.categories.length; k++) {
-    app.showLoading(`Finding markers: ${c.categories[k]} (${k + 1}/${c.categories.length})`, k / c.categories.length);
+    app.showLoading(`Finding markers: ${c.categories[k]} (${k + 1}/${c.categories.length})`, k / c.categories.length, true);
     const mask = new Uint8Array(c.codes.length); let cnt = 0;
     for (let i = 0; i < mask.length; i++) if (c.codes[i] === k) { mask[i] = 1; cnt++; }
     if (cnt < 3 || cnt > mask.length - 3) { groups[c.categories[k]] = []; continue; }
@@ -393,9 +408,22 @@ function selectionPanel(app: App): Panel {
   body_run(s, () => app.guard(async () => {
     const A = maskFor('a'); if (!A) return app.toast('Select cells first (Box / Lasso tool) or choose a category to test.');
     const B = maskFor('b');
-    res = await app.client.de(app.layerInfo.name, A, B, app.transform, (m, f) => app.showLoading(m, f ?? null));
+    res = await app.client.de(app.layerInfo.name, A, B, app.transform, (m, f) => app.showLoading(m, f ?? null, true));
     app.hideLoading(); renderTable();
   }));
+  if (app.remote) {
+    // Every gene gets tested, which over HTTP is one request per gene. Keep the panel visible
+    // — selections, cell-ID export and annotations all still work — but disable the test.
+    const runBtn = s.body.querySelector<HTMLButtonElement>('[data-act=run]')!;
+    runBtn.disabled = true;
+    runBtn.style.background = runBtn.style.color = runBtn.style.borderColor = '';
+    runBtn.title = 'Differential expression reads every gene in the matrix. That is quick on a file opened from your own disk, but a request per gene for a dataset served over the network.';
+    const note = document.createElement('span');
+    note.className = 'pill';
+    note.textContent = 'local files only';
+    note.title = runBtn.title;
+    runBtn.after(note);
+  }
   q('vol').style.display = 'block';
   s.q('[data-act=csv]');
   (s.body.querySelector('[data-act=csv]') as HTMLElement).onclick = () => {

@@ -2,6 +2,7 @@ import { DataClient } from './data/client';
 import { catFromValues, isCat, isNum, type CatCol, type DatasetPayload, type LayerInfo, type MarkerRow, type Markers, type ObsCol } from './data/schema';
 import type { Transform } from './data/compute';
 import { PaneView, type ColorSpec, type Composition, type PaneHost, type Tool } from './ui/pane';
+import { toggleHidden, isolate } from './state/legend';
 import {
   COLORMAPS, categoryColors, rgbaForCategories, rgbaForValues, valueRange, type MapName,
 } from './render/color';
@@ -35,6 +36,10 @@ export class App implements PaneHost {
   selection: Uint8Array | null = null;
   selCount = 0;
   markers: Markers | null = null;
+  /** dataset was opened from a URL rather than a local file */
+  remote = false;
+  /** what the current dataset was opened from, so it can be reopened after a cancel */
+  private lastSource: File | { url: string } | null = null;
   dock!: Dock;
   private tissue: { bitmap: ImageBitmap; w: number; h: number } | null = null;
   private geneIdx = new Map<string, number>();
@@ -49,10 +54,13 @@ export class App implements PaneHost {
   onSelectionChanged: Array<() => void> = [];
 
   // ---------------- loading ----------------
-  async load(file: File) {
-    this.showLoading('Opening file…', null);
+  async load(src: File | { url: string }) {
+    this.showLoading('Opening file…', null, true);
     try {
-      const ds = await this.client.open(file, (m, f) => this.showLoading(m, f ?? null));
+      const onProg = (m: string, f?: number) => this.showLoading(m, f ?? null, true);
+      const ds = src instanceof File ? await this.client.open(src, onProg) : await this.client.openUrl(src.url, onProg);
+      this.remote = !(src instanceof File);
+      this.lastSource = src;
       this.ds = ds;
       await this.init();
       $('welcome').hidden = true; $('app').hidden = false;
@@ -62,13 +70,32 @@ export class App implements PaneHost {
     } finally { this.hideLoading(); }
   }
 
-  showLoading(msg: string, frac: number | null) {
+  showLoading(msg: string, frac: number | null, cancellable = false) {
     $('loading').hidden = false; $('load-msg').textContent = msg;
     const bar = $('load-bar'); bar.classList.toggle('ind', frac == null);
     bar.style.width = frac == null ? '' : `${Math.round(frac * 100)}%`;
+    const btn = $<HTMLButtonElement>('load-cancel');
+    btn.hidden = !cancellable;
+    btn.disabled = false;
+    btn.textContent = 'Cancel';
   }
-  hideLoading() { $('loading').hidden = true; }
-  private progress = (m: string, f?: number) => this.showLoading(m, f ?? null);
+  hideLoading() { $('loading').hidden = true; $('load-cancel').hidden = true; }
+
+  /**
+   * Stop the running computation. The worker is terminated outright - nothing else can
+   * interrupt a synchronous loop - which also discards the dataset it had open, so it is
+   * reopened straight afterwards. Reopening resets the view and closes the panels.
+   */
+  async cancelWork() {
+    const btn = $<HTMLButtonElement>('load-cancel');
+    btn.disabled = true; btn.textContent = 'Cancelling…';
+    this.client.cancel();
+    const src = this.lastSource;
+    if (!src) { this.hideLoading(); $('app').hidden = true; $('welcome').hidden = false; return; }
+    this.showLoading('Reopening dataset…', null);
+    try { await this.load(src); } catch { this.hideLoading(); }
+  }
+  private progress = (m: string, f?: number) => this.showLoading(m, f ?? null, true);
 
   private async init() {
     const ds = this.ds;
@@ -111,7 +138,7 @@ export class App implements PaneHost {
 
     // panes
     const umaps = $('umaps'); this.panes.forEach((p) => p.destroy()); this.panes = []; umaps.innerHTML = '';
-    const emb = pickEmbedding(ds.embeddings)!;
+    const emb = pickEmbedding(ds.embeddings, ds.meta.defaults?.embedding)!;
     this.panes = [new PaneView(umaps, 0, this), new PaneView(umaps, 1, this)];
     this.panes.forEach((p) => { p.setEmbeddings(ds.embeddings, emb.name); p.sc.pointSize = +$<HTMLInputElement>('ptsz').value; });
 
@@ -218,7 +245,11 @@ export class App implements PaneHost {
   }
 
   async guard<T>(fn: () => Promise<T>): Promise<T | undefined> {
-    try { return await fn(); } catch (e) { this.hideLoading(); this.toast((e as Error).message); return undefined; }
+    try { return await fn(); } catch (e) {
+      // A cancel rejects every in-flight call; that is the user's own doing, not an error.
+      if ((e as { cancelled?: boolean }).cancelled) return undefined;
+      this.hideLoading(); this.toast((e as Error).message); return undefined;
+    }
   }
   toast(msg: string) { alert(msg); }
 
@@ -356,12 +387,15 @@ export class App implements PaneHost {
     tip.style.left = Math.min(ev.clientX + 14, innerWidth - 330) + 'px'; tip.style.top = Math.min(ev.clientY + 14, innerHeight - 180) + 'px';
   }
   onLegendToggle(p: PaneView, code: number) {
-    if (code >= 0) { if (p.hidden.has(code)) p.hidden.delete(code); else p.hidden.add(code); }
+    if (code >= 0) {
+      const s = p.spec;
+      toggleHidden(p.hidden, code, s?.type === 'cat' ? s.col.categories.length : 0);
+    }
     this.composeAll();
   }
   onLegendIsolate(p: PaneView, code: number) {
     const s = p.spec; if (s?.type !== 'cat') return;
-    p.hidden.clear(); s.col.categories.forEach((_, k) => { if (k !== code) p.hidden.add(k); });
+    isolate(p.hidden, code, s.col.categories.length);
     this.composeAll();
   }
   onLegendColor(p: PaneView, code: number, hex: string) {
@@ -411,11 +445,16 @@ export class App implements PaneHost {
     on('openbtn', 'click', () => { const i = document.createElement('input'); i.type = 'file'; i.accept = '.h5ad,.scb'; i.onchange = () => i.files?.[0] && this.open(i.files[0]); i.click(); });
     on('savebtn', 'click', () => this.saveView());
     on('loadbtn', 'click', () => { const i = document.createElement('input'); i.type = 'file'; i.accept = '.json'; i.onchange = async () => { const f = i.files?.[0]; if (f) { const txt = await f.text(); await this.guard(() => this.applyView(JSON.parse(txt))); } }; i.click(); });
+    on('load-cancel', 'click', () => void this.cancelWork());
     on('dl-left', 'click', () => this.downloadPane(0));
     on('dl-right', 'click', () => this.downloadPane(1));
     document.querySelectorAll<HTMLButtonElement>('#toolgrp button').forEach((b) => b.addEventListener('click', () => {
-      this.currentTool = b.dataset.tool as Tool;
-      document.querySelectorAll('#toolgrp button').forEach((x) => x.classList.toggle('on', x === b));
+      // Clicking the armed tool disarms it. With no tool armed the canvas still pans, and the
+      // current selection is dropped, so "nothing selected" means the whole dataset again.
+      const off = this.currentTool === (b.dataset.tool as Tool);
+      this.currentTool = off ? 'none' : (b.dataset.tool as Tool);
+      document.querySelectorAll('#toolgrp button').forEach((x) => x.classList.toggle('on', !off && x === b));
+      if (off) this.setSelection(null);
       this.panes.forEach((p) => p.refreshCursor());
     }));
     $('mk-close').onclick = () => ($('marker-pop').style.display = 'none');
@@ -526,11 +565,14 @@ export class App implements PaneHost {
   }
   customAnnotations: string[] = [];
 
-  async open(file: File) {
-    try { await this.load(file); } catch (e) {
+  async open(src: File | { url: string }) {
+    try { await this.load(src); } catch (e) {
       this.hideLoading();
       const msg = (e as Error).message || String(e);
-      if ($('app').hidden) { const box = $('welcome-error'); box.hidden = false; box.textContent = msg; } else alert(msg);
+      if ($('app').hidden) { const box = $('welcome-error'); box.hidden = false; box.textContent = msg; }
+      // A failed open leaves the previous dataset on screen unchanged, which is easy to
+      // misread as the new file having loaded with features missing. Say so explicitly.
+      else alert(`${msg}\n\nNothing was loaded — you are still viewing ${this.ds?.name ?? 'the previous dataset'}.`);
     }
   }
 

@@ -7,7 +7,8 @@ export type ColorSpec =
   | { type: 'cat'; key: string; title: string; col: CatCol; colors: string[] }
   | { type: 'num'; key: string; title: string; values: Float32Array; range: ValueRange; map: MapName };
 
-export type Tool = 'pan' | 'box' | 'lasso';
+// 'none' = no selection tool armed: the canvas still pans, but drags never select.
+export type Tool = 'pan' | 'box' | 'lasso' | 'none';
 
 export interface PaneHost {
   isSync(): boolean;
@@ -54,6 +55,9 @@ export class PaneView {
   private centroidKey = ''; private centroids: ReturnType<typeof categoryCentroids> = [];
   private counts: Int32Array | null = null;
   private drag: null | { kind: 'pan'; sx: number; sy: number; v: { sc: number; x: number; y: number } } | { kind: 'box' | 'lasso'; pts: [number, number][]; mode: 'replace' | 'add' | 'subtract' } = null;
+  // Touch: live pointers on the canvas, and the pinch gesture derived from two of them.
+  private pointers = new Map<number, { x: number; y: number }>();
+  private pinch: null | { dist: number; cx: number; cy: number } = null;
   visibleFn: (i: number) => boolean = () => true;
 
   constructor(parent: HTMLElement, public idx: number, private host: PaneHost) {
@@ -172,7 +176,7 @@ export class PaneView {
           const inp = document.createElement('input'); inp.type = 'color'; inp.value = toHex(s.colors[code]);
           inp.oninput = () => this.host.onLegendColor(this, code, inp.value); inp.click();
         };
-        const lbl = document.createElement('span'); lbl.className = 'lbl'; lbl.textContent = cat; lbl.title = `${cat}\nclick: hide/show · double-click: show only this`;
+        const lbl = document.createElement('span'); lbl.className = 'lbl'; lbl.textContent = cat; lbl.title = `${cat}\nclick: hide/show · double-click: show only this\nclicking the last visible group shows all again`;
         lbl.onclick = () => this.host.onLegendToggle(this, code);
         lbl.ondblclick = () => this.host.onLegendIsolate(this, code);
         const cnt = document.createElement('span'); cnt.className = 'cnt'; cnt.textContent = (this.counts?.[code] ?? 0).toLocaleString();
@@ -229,15 +233,42 @@ export class PaneView {
   private bindEvents() {
     const cw = this.cw;
     const local = (e: PointerEvent): [number, number] => { const r = cw.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+    const pinchOf = (): { dist: number; cx: number; cy: number } | null => {
+      const p = [...this.pointers.values()];
+      if (p.length < 2) return null;
+      const dx = p[0].x - p[1].x, dy = p[0].y - p[1].y;
+      return { dist: Math.hypot(dx, dy) || 1, cx: (p[0].x + p[1].x) / 2, cy: (p[0].y + p[1].y) / 2 };
+    };
     cw.addEventListener('pointerdown', (e) => {
       if (e.button !== 0) return;
       cw.setPointerCapture(e.pointerId);
-      const [x, y] = local(e), tool = e.shiftKey && this.host.tool() === 'pan' ? 'lasso' : this.host.tool();
+      this.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (this.pointers.size === 2) {           // second finger: pinch, and abandon any drag it interrupted
+        this.pinch = pinchOf();
+        this.drag = null;
+        cw.style.cursor = '';
+        this.sc.requestDraw();
+        return;
+      }
+      if (this.pointers.size > 2) return;
+      const [x, y] = local(e), armed = this.armedTool(), tool = e.shiftKey && armed === 'pan' ? 'lasso' : armed;
       if (tool === 'pan') { this.drag = { kind: 'pan', sx: e.clientX, sy: e.clientY, v: { ...this.sc.view } }; cw.style.cursor = 'grabbing'; }
       else this.drag = { kind: tool, pts: [[x, y]], mode: e.altKey ? 'subtract' : e.metaKey || e.ctrlKey ? 'add' : 'replace' };
       this.host.onHover(this, -1, null);
     });
     cw.addEventListener('pointermove', (e) => {
+      if (this.pointers.has(e.pointerId)) this.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (this.pinch) {
+        const now = pinchOf();
+        if (now) {
+          const r = cw.getBoundingClientRect();
+          this.sc.zoomAt(now.cx - r.left, now.cy - r.top, now.dist / this.pinch.dist);
+          this.pinch = now;
+          this.host.onViewChanged(this);
+          this.sc.requestDraw();
+        }
+        return;
+      }
       const d = this.drag, [x, y] = local(e);
       if (d?.kind === 'pan') {
         const dx = e.clientX - d.sx, dy = e.clientY - d.sy;
@@ -250,7 +281,18 @@ export class PaneView {
       } else this.hover(e, x, y);
     });
     const end = (e: PointerEvent) => {
+      this.pointers.delete(e.pointerId);
+      if (this.pinch) {                          // lifting one finger ends the pinch, not the view
+        if (this.pointers.size < 2) this.pinch = null;
+        return;
+      }
       const d = this.drag; this.drag = null; cw.style.cursor = '';
+      // A touch screen has no hover, so a tap that didn't pan is treated as "inspect this point".
+      if (d?.kind === 'pan' && e.pointerType !== 'mouse'
+          && Math.hypot(e.clientX - d.sx, e.clientY - d.sy) < 6) {
+        const [tx, ty] = local(e);
+        this.hover(e, tx, ty);
+      }
       if (d && d.kind !== 'pan') {
         let poly: [number, number][];
         if (d.kind === 'box') { const [a, b] = [d.pts[0], d.pts[d.pts.length - 1] ?? d.pts[0]]; poly = [[a[0], a[1]], [b[0], a[1]], [b[0], b[1]], [a[0], b[1]]]; }
@@ -258,7 +300,7 @@ export class PaneView {
         if (poly.length >= 3 && (d.kind === 'lasso' || Math.abs(poly[0][0] - poly[2][0]) > 2)) {
           const dp = poly.map(([px, py]) => this.sc.toData(px, py));
           this.host.onSelect(pointsInPolygon(this.pos, dp, this.visibleFn), d.mode);
-        } else if (this.host.tool() !== 'pan' || e.shiftKey) this.host.onSelect(new Uint8Array(this.n), 'replace');
+        } else if (this.armedTool() !== 'pan' || e.shiftKey) this.host.onSelect(new Uint8Array(this.n), 'replace');
         this.sc.requestDraw();
       }
     };
@@ -277,7 +319,9 @@ export class PaneView {
     const [dx, dy] = this.sc.toData(x, y), r = 7 / this.sc.view.sc;
     this.host.onHover(this, this.grid.nearest(dx, dy, r, this.visibleFn), e);
   }
-  refreshCursor() { this.cw.classList.toggle('sel', this.host.tool() !== 'pan'); }
+  /** The tool actually in force: with no tool armed the canvas behaves as pan. */
+  private armedTool(): 'pan' | 'box' | 'lasso' { const t = this.host.tool(); return t === 'none' ? 'pan' : t; }
+  refreshCursor() { this.cw.classList.toggle('sel', this.armedTool() !== 'pan'); }
   sizeChanged() { this.sc.resize(); }
 }
 

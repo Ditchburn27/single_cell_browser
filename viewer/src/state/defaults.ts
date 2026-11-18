@@ -19,19 +19,24 @@ export function scoreAnnotation(ds: DatasetPayload, key: string): number {
 }
 
 export function pickAnnotation(ds: DatasetPayload): string | null {
+  const want = ds.meta.defaults?.annotation;
+  if (want && isCat(ds.obs[want])) return want;
   let best: string | null = null, bs = -Infinity;
   for (const k of ds.obsOrder) { const s = scoreAnnotation(ds, k); if (s > bs) { bs = s; best = k; } }
   return bs > -50 ? best : null;
 }
 
-export function pickEmbedding(list: Embedding[]): Embedding | null {
+export function pickEmbedding(list: Embedding[], want?: string): Embedding | null {
   if (!list.length) return null;
+  if (want) { const e = list.find((x) => x.name === want); if (e) return e; }
   const order = [/umap/i, /tsne|t-sne/i, /spatial/i, /phate|draw_graph|fa$/i, /pca/i];
   for (const re of order) { const e = list.find((x) => re.test(x.name)); if (e) return e; }
   return list[0];
 }
 
 export function pickGene(ds: DatasetPayload, varNames: string[]): string | null {
+  const want = ds.meta.defaults?.gene;
+  if (want && varNames.includes(want)) return want;
   const g = ds.markers && Object.values(ds.markers.groups).find((rows) => rows.length)?.[0]?.gene;
   if (g && varNames.includes(g)) return g;
   return varNames[0] ?? null;
